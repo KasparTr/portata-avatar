@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/vite.svg" type="image/svg+xml" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
+    />
+    <title>Interactive Avatar Demo</title>
+    <style>
+      /* Speaker selection card styles */
+      .speaker-options {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .speaker-card {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 20px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        background-color: #f9f9f9;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 100px;
+        position: relative;
+        margin-bottom: 0;
+      }
+
+      .speaker-card:hover {
+        border-color: #007bff;
+        background-color: #f0f8ff;
+      }
+
+      .speaker-card input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+        margin: 0;
+      }
+
+      .speaker-card input[type="radio"]:checked + .speaker-label {
+        color: white;
+      }
+
+      .speaker-card:has(input[type="radio"]:checked) {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+      }
+
+      .speaker-label {
+        font-weight: 500;
+        font-size: 14px;
+        transition: color 0.2s ease;
+      }
+    </style>
+  </head>
+
+  <body>
+    <main
+      class="container"
+      style="display: flex; flex-direction: column; align-items: center"
+    >
+      <h1>Interactive Avatar Demo (Vite + TypeScript)</h1>
+
+      <!-- Video Section -->
+      <article style="width: fit-content">
+        <video id="avatarVideo" autoplay playsinline></video>
+      </article>
+
+      <!-- Controls Section -->
+      <section>
+        <section role="group">
+          <button id="startSession">Start Session</button>
+          <button id="endSession" disabled>End Session</button>
+        </section>
+
+        <section role="group">
+          <input
+            type="text"
+            id="userInput"
+            placeholder="Type something to talk to the avatar..."
+            aria-label="User input"
+          />
+          <button id="speakButton" role="button">Speak</button>
+          <button id="repeatButton" role="button">Repeat</button>
+        </section>
+
+        <!-- Transcription Strategy Selection -->
+        <section>
+          <fieldset>
+            <legend>Transcription Mode</legend>
+            <label>
+              <input type="radio" name="transcriptionStrategy" value="real_time" checked>
+              Real-time (automatic transcription)
+            </label>
+            <label>
+              <input type="radio" name="transcriptionStrategy" value="on_demand">
+              On-demand (transcribe when stopped)
+            </label>
+          </fieldset>
+        </section>
+
+        <!-- Speaker Selection (for on-demand mode) -->
+        <section id="speakerSelection" style="display: none;">
+          <fieldset>
+            <legend>Speaker</legend>
+            <div class="speaker-options">
+              <label class="speaker-card">
+                <input type="radio" name="speaker" value="kirsi" checked>
+                <span class="speaker-label">Kristi</span>
+              </label>
+              <label class="speaker-card">
+                <input type="radio" name="speaker" value="raivo">
+                <span class="speaker-label">Raivo</span>
+              </label>
+              <label class="speaker-card">
+                <input type="radio" name="speaker" value="marko">
+                <span class="speaker-label">Marko</span>
+              </label>
+              <label class="speaker-card">
+                <input type="radio" name="speaker" value="moderator">
+                <span class="speaker-label">Moderator</span>
+              </label>
+            </div>
+          </fieldset>
+        </section>
+
+        <!-- Audio Transcription Controls -->
+        <section role="group">
+          <button id="startRecordingButton" role="button">🎤 Start Recording</button>
+          <button id="stopRecordingButton" role="button" disabled>⏹️ Stop Recording</button>
+        </section>
+
+        <!-- Transcription Output -->
+        <section>
+          <label for="transcriptionOutput">Live Transcription:</label>
+          <textarea
+            id="transcriptionOutput"
+            readonly
+            placeholder="Transcribed text will appear here..."
+            rows="8"
+            style="width: 100%; resize: vertical;"
+          ></textarea>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
