@@ -65,13 +65,26 @@ export const AUDIO_TRANSCRIPTION_DEFAULTS = {
 } as const;
 
 /**
+ * Speaker Names - easily changeable in one place
+ */
+export const SPEAKER_NAMES = {
+  // KRISTI: 'Kristi',
+  // RAIVO: 'Raivo', 
+  RAINA: 'Raina',
+  MODERATOR: 'moderator',
+  MODE_NAME: 'Mait',
+  MODERATOR_FULL: 'Moderaator, Mait'
+} as const;
+
+/**
  * Speaker Options for Transcription Prefixes
  */
 export const SPEAKER_OPTIONS = [
-  { id: 'kirsi', label: 'Kristi', prefix: '[Kristi]: ' },
-  { id: 'raivo', label: 'Raivo', prefix: '[Raivo]: ' },
-  { id: 'marko', label: 'Marko', prefix: '[Marko]: ' },
-  { id: 'moderator', label: 'moderator', prefix: '[Moderaator, Tõnis]: ' },
+  // { id: 'kirsi', label: SPEAKER_NAMES.KRISTI, prefix: `[${SPEAKER_NAMES.KRISTI}]: ` },
+  // { id: 'raivo', label: SPEAKER_NAMES.RAIVO, prefix: `[${SPEAKER_NAMES.RAIVO}]: ` },
+  // { id: 'marko', label: SPEAKER_NAMES.MARKO, prefix: `[${SPEAKER_NAMES.MARKO}]: ` },
+  { id: 'raina', label: SPEAKER_NAMES.RAINA, prefix: `[${SPEAKER_NAMES.RAINA}]: ` },
+  { id: 'moderator', label: SPEAKER_NAMES.MODERATOR, prefix: `[${SPEAKER_NAMES.MODERATOR_FULL}]: ` },
 ] as const;
 
 /**
@@ -91,4 +104,4 @@ export const AUDIO_FILE_EXTENSIONS = {
   'audio/ogg': 'audio.ogg'
 } as const;
 
-export const KNOWLEDGEBASE = "Instructions: You are a panelist, taking part of a five member panel. The panel is part of the Telia Digital Hub conference. Panel Moderator Tõnis is leading the panel. When prompted, form a short opinion based on the transcript of the ongoing panel discussion (is available) and your own knowledge. Keep the answer strictly on topic and around the conference theme (below). Always reply in Estonian language, regardless of prompt language. #Conference theme: []. # Transcript: "
+export const KNOWLEDGEBASE_BASE = `#Instructions: Your name is Anu, you are a panelist taking part of panel discussion on the topic of digital transformation and AI. You are the newest member of Portata - We help enterprises, institutions, and nations turn intelligence into infrastructure with PAGIS, our AGI execution OS.  The panel is part of the Telia Digital Hub conference. Panel moderator ${SPEAKER_NAMES.MODE_NAME} will ask you questions, adress him when he asks you a questions (all prompts are from him). When prompted, form a short opinion based on the transcript of the ongoing panel discussion (if available) and your own knowledge. Keep the answer strictly on topic and around the conference theme (if available). Always reply in Estonian language, regardless of prompt language. #Conference theme: Digital Transformation. # Panel Discussion Transcript:"`

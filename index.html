@@ -235,8 +235,15 @@
       <!-- <h1>Interactive Avatar Demo (Vite + TypeScript)</h1> -->
 
       <!-- Video Section -->
-      <article style="width: fit-content">
-        <video id="avatarVideo" autoplay playsinline></video>
+      <article style="width: fit-content; position: relative;">
+        <video id="avatarVideo" autoplay playsinline style="display: none;"></video>
+        <img id="avatarPlaceholder" src="/avatar.png" alt="Avatar Placeholder" style="
+          width: 1280px; 
+          height: 720px; 
+          border-radius: 12px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+          object-fit: cover;
+        ">
       </article>
 
       <!-- Controls Section -->
@@ -286,11 +293,11 @@
           <fieldset>
             <legend>Transcription Mode</legend>
             <label>
-              <input type="radio" name="transcriptionStrategy" value="real_time" checked>
+              <input type="radio" name="transcriptionStrategy" value="real_time">
               Real-time (automatic transcription)
             </label>
             <label>
-              <input type="radio" name="transcriptionStrategy" value="on_demand">
+              <input type="radio" name="transcriptionStrategy" value="on_demand" checked>
               On-demand (transcribe when stopped)
             </label>
           </fieldset>
@@ -300,23 +307,8 @@
         <section id="speakerSelection" style="display: none;">
           <fieldset>
             <legend>Speaker</legend>
-            <div class="speaker-options">
-              <label class="speaker-card">
-                <input type="radio" name="speaker" value="kirsi" checked>
-                <span class="speaker-label">Kristi</span>
-              </label>
-              <label class="speaker-card">
-                <input type="radio" name="speaker" value="raivo">
-                <span class="speaker-label">Raivo</span>
-              </label>
-              <label class="speaker-card">
-                <input type="radio" name="speaker" value="marko">
-                <span class="speaker-label">Marko</span>
-              </label>
-              <label class="speaker-card">
-                <input type="radio" name="speaker" value="moderator">
-                <span class="speaker-label">Moderator</span>
-              </label>
+            <div class="speaker-options" id="speakerOptions">
+              <!-- Speaker options will be dynamically generated -->
             </div>
           </fieldset>
         </section>

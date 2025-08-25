@@ -5,11 +5,13 @@ import StreamingAvatar, {
   VoiceEmotion
 } from "@heygen/streaming-avatar";
 import { AudioTranscriptionService, type TranscriptionResult } from "./audioTranscriptionService";
-import { TranscriptionStrategy, SPEAKER_OPTIONS, KNOWLEDGEBASE, AVATAR_DEFAULTS } from './constants';
+import { TranscriptionStrategy, SPEAKER_OPTIONS, KNOWLEDGEBASE_BASE, AVATAR_DEFAULTS } from './constants';
 import type { TranscriptionStrategyType } from './constants';
+import { KnowledgeBaseService } from './knowledgeBaseService';
 
 // DOM elements
 const videoElement = document.getElementById("avatarVideo") as HTMLVideoElement;
+const avatarPlaceholder = document.getElementById("avatarPlaceholder") as HTMLElement;
 const startButton = document.getElementById(
   "startSession"
 ) as HTMLButtonElement;
@@ -42,6 +44,7 @@ let isWaitingForVoiceInput: boolean = false;
 let isRecording: boolean = false;
 let recordingMode: 'avatar' | 'transcription' = 'avatar';
 let isAvatarSpeaking: boolean = false;
+let knowledgeBaseService: KnowledgeBaseService | null = null;
 
 // Drag functionality variables
 let isDragging = false;
@@ -72,21 +75,7 @@ async function initializeAvatarSession() {
     avatar.on(StreamingEvents.STREAM_READY, handleStreamReady);
     avatar.on(StreamingEvents.STREAM_DISCONNECTED, handleStreamDisconnected);
     avatar.on(StreamingEvents.AVATAR_START_TALKING, handleAvatarStartTalking);
-    // Get latest transcription content from the text area
-    const latestTranscript = transcriptionOutput.value || entireTranscript;
-    console.log("Live transcription content:", transcriptionOutput.value);
-    console.log("Entire transcript variable:", );
-    console.log("Using transcript:", latestTranscript);
-    let kb = KNOWLEDGEBASE
-    if(entireTranscript) kb += entireTranscript
-    else if (latestTranscript) kb += latestTranscript
-
-    console.log("Knowledgebase: ", kb);
-    const ac = createAvatarConfig(kb)
-    sessionData = await avatar.createStartAvatar(ac);
-
-    console.log("Session data:", sessionData);
-    console.log("Avatar session initialized successfully");
+    sessionData = await avatar.createStartAvatar(createAvatarConfig());
 
     // Enable start button, keep stop button disabled until avatar speaks
     endButton.disabled = false;
@@ -104,12 +93,12 @@ async function initializeAvatarSession() {
 }
 
 
-function createAvatarConfig(knowledgeBase: string){
+function createAvatarConfig(){
   const config = {
     quality: AvatarQuality.High,
     avatarName: AVATAR_DEFAULTS.AVATAR_NAME,
-    // knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID,
-    knowledgeBase: knowledgeBase,
+    knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID,
+    // knowledgeBase: knowledgeBase,
     language: AVATAR_DEFAULTS.LANGUAGE,
     voice: {}
   }
@@ -147,6 +136,11 @@ function handleStreamReady(event: any) {
     videoElement.srcObject = event.detail;
     videoElement.onloadedmetadata = () => {
       videoElement.play().catch(console.error);
+      // Show video and hide placeholder
+      videoElement.style.display = 'block';
+      if (avatarPlaceholder) {
+        avatarPlaceholder.style.display = 'none';
+      }
     };
   } else {
     console.error("Stream is not available");
@@ -158,6 +152,12 @@ function handleStreamDisconnected() {
   console.log("Stream disconnected");
   if (videoElement) {
     videoElement.srcObject = null;
+    videoElement.style.display = 'none';
+  }
+  
+  // Show placeholder
+  if (avatarPlaceholder) {
+    avatarPlaceholder.style.display = 'flex';
   }
 
   // Enable start button and disable end button
@@ -179,7 +179,13 @@ async function terminateAvatarSession() {
 
   await avatar.stopAvatar();
   videoElement.srcObject = null;
+  videoElement.style.display = 'none';
   avatar = null;
+  
+  // Show placeholder
+  if (avatarPlaceholder) {
+    avatarPlaceholder.style.display = 'flex';
+  }
   
   // Reset button states
   startButton.disabled = false;
@@ -323,8 +329,7 @@ function toggleLever(event?: Event) {
     event.stopPropagation();
   }
   
-  console.log('Toggling lever from:', recordingMode);
-  
+ 
   if (recordingMode === 'avatar') {
     recordingMode = 'transcription';
     leverHandle.classList.add('down');
@@ -342,14 +347,11 @@ function toggleLever(event?: Event) {
 
 // Handle unified recording
 async function handleUnifiedRecord() {
-  console.log('Record button clicked, current state:', { isRecording, recordingMode });
-  
   if (!isRecording) {
     // Start recording
     isRecording = true;
     unifiedRecordButton.classList.add('recording');
     unifiedRecordButton.textContent = '⏹️ Send';
-    console.log('Starting recording in mode:', recordingMode);
     
     if (recordingMode === 'avatar') {
       // Start voice input for avatar
@@ -490,11 +492,68 @@ async function handleUnifiedRecord() {
   }
 }
 
-// Save transcription function (unimplemented)
-function saveTranscription() {
-  // TODO: Implement transcription saving functionality
-  console.log('saveTranscription called - implementation needed');
-  console.log('Current transcription:', transcriptionOutput.value);
+// Initialize knowledge base service
+async function initializeKnowledgeBaseService(): Promise<KnowledgeBaseService | null> {
+  const heygenApiKey = import.meta.env.VITE_HEYGEN_API_KEY;
+  
+  if (!heygenApiKey) {
+    console.error('HeyGen API key not found in environment variables');
+    return null;
+  }
+
+  const service = new KnowledgeBaseService({
+    apiKey: heygenApiKey,
+    knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID
+  });
+
+  return service;
+}
+
+// Save transcription function with knowledge base integration
+async function saveTranscription() {
+  try {
+    const transcriptionText = transcriptionOutput.value.trim();
+    
+    if (!transcriptionText) return;
+
+    // Initialize knowledge base service if not already done
+    if (!knowledgeBaseService) {
+      knowledgeBaseService = await initializeKnowledgeBaseService();
+      if (!knowledgeBaseService) {
+        alert('Failed to initialize knowledge base service. Please check your HeyGen API key.');
+        return;
+      } else {
+        knowledgeBaseService.setKnowledgeId(AVATAR_DEFAULTS.KNOWLEDGE_ID);
+      }
+    }
+
+    // Show loading state
+    const originalButtonText = saveTranscriptionButton.textContent;
+    saveTranscriptionButton.textContent = '💾 Saving...';
+    saveTranscriptionButton.disabled = true;
+
+    // Update knowledge base with transcription content
+    await knowledgeBaseService.updateKnowledgeBase(transcriptionText);
+    // todo:store to local storage
+    localStorage.setItem('transcription', transcriptionText);
+
+    // Show success feedback
+    saveTranscriptionButton.textContent = '✅ Saved!';
+    setTimeout(() => {
+      saveTranscriptionButton.textContent = originalButtonText;
+      saveTranscriptionButton.disabled = false;
+    }, 2000);
+
+  } catch (error) {
+    console.error('Failed to save transcription to knowledge base:', error);
+    
+    // Reset button state
+    saveTranscriptionButton.textContent = '💾 Save Transcription';
+    saveTranscriptionButton.disabled = false;
+    
+    // Show error to user
+    alert(`Failed to save transcription: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 // Drag functionality
@@ -682,8 +741,23 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
+// Generate speaker options dynamically
+function generateSpeakerOptions() {
+  const speakerOptionsContainer = document.getElementById('speakerOptions');
+  if (!speakerOptionsContainer) return;
+
+  speakerOptionsContainer.innerHTML = SPEAKER_OPTIONS.map((speaker, index) => `
+    <label class="speaker-card">
+      <input type="radio" name="speaker" value="${speaker.id}" ${index === 0 ? 'checked' : ''}>
+      <span class="speaker-label">${speaker.label}</span>
+    </label>
+  `).join('');
+}
+
 // Initialize UI event listeners
 document.addEventListener('DOMContentLoaded', () => {
+  // Generate speaker options from constants
+  generateSpeakerOptions();
   // Strategy selection event listeners
   const strategyRadios = document.querySelectorAll('input[name="transcriptionStrategy"]') as NodeListOf<HTMLInputElement>;
   strategyRadios.forEach(radio => {
