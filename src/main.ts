@@ -1,10 +1,11 @@
 import StreamingAvatar, {
   AvatarQuality,
   StreamingEvents,
-  TaskType
+  TaskType,
+  VoiceEmotion
 } from "@heygen/streaming-avatar";
 import { AudioTranscriptionService, type TranscriptionResult } from "./audioTranscriptionService";
-import { TranscriptionStrategy, SPEAKER_OPTIONS } from './constants';
+import { TranscriptionStrategy, SPEAKER_OPTIONS, KNOWLEDGEBASE } from './constants';
 import type { TranscriptionStrategyType } from './constants';
 
 // DOM elements
@@ -19,9 +20,17 @@ const userInput = document.getElementById("userInput") as HTMLInputElement;
 const startRecordingButton = document.getElementById("startRecordingButton") as HTMLButtonElement;
 const stopRecordingButton = document.getElementById("stopRecordingButton") as HTMLButtonElement;
 const transcriptionOutput = document.getElementById("transcriptionOutput") as HTMLTextAreaElement;
+const unifiedRecordButton = document.getElementById("unifiedRecordButton") as HTMLButtonElement;
+const saveTranscriptionButton = document.getElementById("saveTranscriptionButton") as HTMLButtonElement;
+const leverHandle = document.getElementById("leverHandle") as HTMLElement;
+const leverTrack = document.getElementById("leverTrack") as HTMLElement;
+const avatarLabel = document.getElementById("avatarLabel") as HTMLElement;
+const transcriptionLabel = document.getElementById("transcriptionLabel") as HTMLElement;
+const leverControl = document.getElementById("leverControl") as HTMLElement;
+const dragHandle = document.getElementById("dragHandle") as HTMLElement;
 
 const KNOWLEDGE_ID = "2b705aff1a834f5c93698641bd29fe5c";
-
+const AVATAR_NAME = "Wayne_20240711"
 let avatar: StreamingAvatar | null = null;
 let sessionData: any = null;
 let transcriptionService: AudioTranscriptionService | null = null;
@@ -29,6 +38,14 @@ let currentStrategy: TranscriptionStrategyType = TranscriptionStrategy.REAL_TIME
 let currentSpeaker: string = SPEAKER_OPTIONS[0].id;
 let lockedSpeaker: string = SPEAKER_OPTIONS[0].id; // Speaker locked at recording stop time
 let entireTranscript: string = "";
+let voiceInputTranscriptionService: AudioTranscriptionService | null = null;
+let isWaitingForVoiceInput: boolean = false;
+let isRecording: boolean = false;
+let recordingMode: 'avatar' | 'transcription' = 'avatar';
+
+// Drag functionality variables
+let isDragging = false;
+let dragOffset = { x: 0, y: 0 };
 
 // Helper function to fetch access token
 async function fetchAccessToken(): Promise<string> {
@@ -52,18 +69,27 @@ async function initializeAvatarSession() {
 
   avatar.on(StreamingEvents.STREAM_READY, handleStreamReady);
   avatar.on(StreamingEvents.STREAM_DISCONNECTED, handleStreamDisconnected);
-  console.log("entireTranscript: ", entireTranscript)
+
+  const kb = KNOWLEDGEBASE +  entireTranscript
+  console.log("Knowledge base:", kb)
   sessionData = await avatar.createStartAvatar({
     quality: AvatarQuality.High,
-    avatarName: "Wayne_20240711",
+    avatarName: AVATAR_NAME,
     knowledgeId: KNOWLEDGE_ID,
-    knowledgeBase: entireTranscript
-    // language: "et",
-    // voice: {
-    //   elevenlabsSettings: {
-    //     model_id: "eleven_multilingual_v2"
-    //   }
-    // }
+    knowledgeBase: kb,
+    // language: "fin",
+    voice: {
+      // voiceId: "1bd001e7e50f421d891986aad5158bc8",
+      rate: 1.0,
+      emotion: VoiceEmotion.FRIENDLY,
+      // elevenlabsSettings: {
+      //   modelId: "eleven_multilingual_v2",
+      //   stability: 0.5,
+      //   similarity_boost: 0.8,
+      //   style: 0.0,
+      //   use_speaker_boost: true
+      // }
+    }
   });
 
   console.log("Session data:", sessionData);
@@ -167,7 +193,7 @@ function getSpeakerPrefix(): string {
 }
 
 // Handle transcription start
-async function handleStartRecording() {
+async function handleStartTranscription() {
   if (!transcriptionService) {
     await initializeTranscriptionService();
     if (!transcriptionService) return;
@@ -196,9 +222,7 @@ async function handleStartRecording() {
         
         // Auto-scroll to bottom
         transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
-        
-        // Update the user input field with the latest transcription (without prefix)
-        userInput.value = result.text;
+
       },
       (error: Error) => {
         console.error('Transcription error:', error);
@@ -220,7 +244,7 @@ async function handleStartRecording() {
 }
 
 // Handle transcription stop
-async function handleStopRecording() {
+async function handleStopTranscription() {
   // Lock in the current speaker selection at the moment stop is clicked
   if (currentStrategy === TranscriptionStrategy.ON_DEMAND) {
     lockedSpeaker = currentSpeaker;
@@ -232,7 +256,280 @@ async function handleStopRecording() {
   
   startRecordingButton.disabled = false;
   stopRecordingButton.disabled = true;
-  startRecordingButton.textContent = '🎤 Start Recording';
+  startRecordingButton.textContent = '🎤 Start Transcription';
+}
+
+// Handle lever toggle
+function toggleLever(event?: Event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  
+  console.log('Toggling lever from:', recordingMode);
+  
+  if (recordingMode === 'avatar') {
+    recordingMode = 'transcription';
+    leverHandle.classList.add('down');
+    avatarLabel.classList.remove('active');
+    transcriptionLabel.classList.add('active');
+    console.log('Switched to transcription mode');
+  } else {
+    recordingMode = 'avatar';
+    leverHandle.classList.remove('down');
+    avatarLabel.classList.add('active');
+    transcriptionLabel.classList.remove('active');
+    console.log('Switched to avatar mode');
+  }
+}
+
+// Handle unified recording
+async function handleUnifiedRecord() {
+  console.log('Record button clicked, current state:', { isRecording, recordingMode });
+  
+  if (!isRecording) {
+    // Start recording
+    isRecording = true;
+    unifiedRecordButton.classList.add('recording');
+    unifiedRecordButton.textContent = '⏹️ Send';
+    console.log('Starting recording in mode:', recordingMode);
+    
+    if (recordingMode === 'avatar') {
+      // Start voice input for avatar
+      if (!voiceInputTranscriptionService) {
+        await initializeVoiceInputTranscriptionService();
+        if (!voiceInputTranscriptionService) {
+          isRecording = false;
+          unifiedRecordButton.classList.remove('recording');
+          unifiedRecordButton.textContent = '🎤 Record';
+          return;
+        }
+      }
+      
+      try {
+        await voiceInputTranscriptionService.startRecording(
+          (result: TranscriptionResult) => {
+            userInput.value = result.text;
+            console.log('Voice transcription result:', result.text);
+            
+            if (isWaitingForVoiceInput) {
+              isWaitingForVoiceInput = false;
+              console.log("Voice input completed: ", userInput.value);
+              
+              // Reset button states
+              isRecording = false;
+              unifiedRecordButton.classList.remove('recording');
+              unifiedRecordButton.textContent = '🎤 Record';
+              
+              // Trigger avatar to speak if there's text
+              if (userInput.value.trim()) {
+                handleSpeak();
+              }
+            }
+          },
+          (error: Error) => {
+            console.error('Voice input transcription error:', error);
+            isWaitingForVoiceInput = false;
+            isRecording = false;
+            unifiedRecordButton.classList.remove('recording');
+            unifiedRecordButton.textContent = '🎤 Record';
+          }
+        );
+      } catch (error) {
+        console.error('Failed to start voice recording:', error);
+        isRecording = false;
+        unifiedRecordButton.classList.remove('recording');
+        unifiedRecordButton.textContent = '🎤 Record';
+      }
+    } else {
+      // Start transcription recording
+      if (!transcriptionService) {
+        await initializeTranscriptionService();
+        if (!transcriptionService) {
+          isRecording = false;
+          unifiedRecordButton.classList.remove('recording');
+          unifiedRecordButton.textContent = '🎤 Record';
+          return;
+        }
+      }
+      
+      
+      try {
+        await transcriptionService.startRecording(
+          (result: TranscriptionResult) => {
+            let transcriptionText = result.text;
+            console.log('Transcription result:', transcriptionText);
+            
+            if (currentStrategy === TranscriptionStrategy.ON_DEMAND) {
+              transcriptionText = getSpeakerPrefix() + transcriptionText;
+            }
+            
+            // Store in entire transcript variable
+            const separator = entireTranscript ? '\n\n' : '';
+            entireTranscript = entireTranscript ? `${entireTranscript}${separator}${transcriptionText}` : transcriptionText;
+            
+            // Append new transcription to the output
+            const currentText = transcriptionOutput.value;
+            const displaySeparator = currentText ? '\n\n' : '';
+            const newText = currentText ? `${currentText}${displaySeparator}${transcriptionText}` : transcriptionText;
+            transcriptionOutput.value = newText;
+            
+            // Auto-scroll to bottom
+            transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
+          },
+          (error: Error) => {
+            console.error('Transcription error:', error);
+            isRecording = false;
+            unifiedRecordButton.classList.remove('recording');
+            unifiedRecordButton.textContent = '🎤 Record';
+          }
+        );
+      } catch (error) {
+        console.error('Failed to start transcription recording:', error);
+        isRecording = false;
+        unifiedRecordButton.classList.remove('recording');
+        unifiedRecordButton.textContent = '🎤 Record';
+      }
+    }
+  } else {
+    // Stop recording
+    console.log('Stopping recording in mode:', recordingMode);
+    
+    if (recordingMode === 'avatar') {
+      isWaitingForVoiceInput = true;
+      if (voiceInputTranscriptionService) {
+        await voiceInputTranscriptionService.stopRecording();
+      }
+      unifiedRecordButton.textContent = '🎤 Processing...';
+    } else {
+      // Lock speaker at stop time for on-demand transcription
+      if (currentStrategy === TranscriptionStrategy.ON_DEMAND) {
+        lockedSpeaker = currentSpeaker;
+      }
+      
+      if (transcriptionService) {
+        await transcriptionService.stopRecording();
+      }
+      isRecording = false;
+      unifiedRecordButton.classList.remove('recording');
+      unifiedRecordButton.textContent = '🎤 Record';
+    }
+  }
+}
+
+// Save transcription function (unimplemented)
+function saveTranscription() {
+  // TODO: Implement transcription saving functionality
+  console.log('saveTranscription called - implementation needed');
+  console.log('Current transcription:', transcriptionOutput.value);
+}
+
+// Drag functionality
+function initializeDragFunctionality() {
+  let startX = 0;
+  let startY = 0;
+  let initialX = 0;
+  let initialY = 0;
+
+  function handleDragStart(e: MouseEvent | TouchEvent) {
+    if (e.target === leverTrack || e.target === leverHandle || 
+        e.target === avatarLabel || e.target === transcriptionLabel ||
+        e.target === unifiedRecordButton) {
+      return; // Don't start drag on interactive elements
+    }
+
+    isDragging = true;
+    leverControl.classList.add('dragging');
+
+    const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX;
+    const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY;
+
+    const rect = leverControl.getBoundingClientRect();
+    initialX = rect.left;
+    initialY = rect.top;
+    startX = clientX - initialX;
+    startY = clientY - initialY;
+
+    dragOffset.x = startX;
+    dragOffset.y = startY;
+
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+    document.addEventListener('touchmove', handleDragMove, { passive: false });
+    document.addEventListener('touchend', handleDragEnd);
+
+    e.preventDefault();
+  }
+
+  function handleDragMove(e: MouseEvent | TouchEvent) {
+    if (!isDragging) return;
+
+    e.preventDefault();
+
+    const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX;
+    const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY;
+
+    let newX = clientX - dragOffset.x;
+    let newY = clientY - dragOffset.y;
+
+    // Keep within screen bounds
+    const rect = leverControl.getBoundingClientRect();
+    const maxX = window.innerWidth - rect.width;
+    const maxY = window.innerHeight - rect.height;
+
+    newX = Math.max(0, Math.min(newX, maxX));
+    newY = Math.max(0, Math.min(newY, maxY));
+
+    leverControl.style.left = `${newX}px`;
+    leverControl.style.top = `${newY}px`;
+    leverControl.style.right = 'auto';
+    leverControl.style.transform = 'none';
+  }
+
+  function handleDragEnd() {
+    if (!isDragging) return;
+
+    isDragging = false;
+    leverControl.classList.remove('dragging');
+
+    document.removeEventListener('mousemove', handleDragMove);
+    document.removeEventListener('mouseup', handleDragEnd);
+    document.removeEventListener('touchmove', handleDragMove);
+    document.removeEventListener('touchend', handleDragEnd);
+  }
+
+  // Add event listeners for drag start
+  leverControl.addEventListener('mousedown', handleDragStart);
+  leverControl.addEventListener('touchstart', handleDragStart, { passive: false });
+  dragHandle.addEventListener('mousedown', handleDragStart);
+  dragHandle.addEventListener('touchstart', handleDragStart, { passive: false });
+}
+
+// Initialize voice input transcription service
+async function initializeVoiceInputTranscriptionService() {
+  const elevenlabsApiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
+  
+  if (!elevenlabsApiKey) {
+    console.error('ElevenLabs API key not found in environment variables');
+    return;
+  }
+
+  if (!AudioTranscriptionService.isSupported()) {
+    console.error('Audio transcription not supported in this browser');
+    return;
+  }
+
+  voiceInputTranscriptionService = new AudioTranscriptionService({
+    apiKey: elevenlabsApiKey,
+    strategy: TranscriptionStrategy.ON_DEMAND // Always use on-demand for voice input
+  });
+
+  try {
+    await voiceInputTranscriptionService.initialize();
+    console.log('Voice input transcription service initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize voice input transcription service:', error);
+  }
 }
 
 // Handle transcription strategy change
@@ -289,10 +586,10 @@ document.addEventListener('keydown', (event) => {
     
     if (startRecordingButton.disabled) {
       // Currently recording, so stop
-      handleStopRecording();
+      handleStopTranscription();
     } else {
       // Not recording, so start
-      handleStartRecording();
+      handleStartTranscription();
     }
   }
 });
@@ -325,6 +622,29 @@ document.addEventListener('DOMContentLoaded', () => {
     radio.addEventListener('change', handleSpeakerChange);
   });
   
+  // Lever control event listeners
+  leverTrack.addEventListener("click", toggleLever);
+  leverHandle.addEventListener("click", toggleLever);
+  avatarLabel.addEventListener("click", (event) => {
+    event.preventDefault();
+    console.log('Avatar label clicked');
+    if (recordingMode !== 'avatar') toggleLever();
+  });
+  transcriptionLabel.addEventListener("click", (event) => {
+    event.preventDefault();
+    console.log('Transcription label clicked');
+    if (recordingMode !== 'transcription') toggleLever();
+  });
+  
+  // Unified record button event listener
+  unifiedRecordButton.addEventListener("click", handleUnifiedRecord);
+  
+  // Save transcription button event listener
+  saveTranscriptionButton.addEventListener("click", saveTranscription);
+  
+  // Initialize drag functionality
+  initializeDragFunctionality();
+  
   // Initialize UI state
   handleStrategyChange();
   handleSpeakerChange();
@@ -335,5 +655,5 @@ startButton.addEventListener("click", initializeAvatarSession);
 endButton.addEventListener("click", terminateAvatarSession);
 speakButton.addEventListener("click", handleSpeak);
 repeatButton.addEventListener("click", handleRepeat);
-startRecordingButton.addEventListener("click", handleStartRecording);
-stopRecordingButton.addEventListener("click", handleStopRecording);
+startRecordingButton.addEventListener("click", handleStartTranscription);
+stopRecordingButton.addEventListener("click", handleStopTranscription);

@@ -59,6 +59,171 @@
         font-size: 14px;
         transition: color 0.2s ease;
       }
+
+      /* Recording Studio Lever Styles */
+      .recording-control {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin: 20px 0;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        border: 2px solid #e0e0e0;
+      }
+
+      .lever-control {
+        position: fixed;
+        right: 30px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1000;
+        background: #ffffff;
+        padding: 25px 20px;
+        border-radius: 20px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+        border: 3px solid #e0e0e0;
+        cursor: move;
+        user-select: none;
+        transition: box-shadow 0.2s ease;
+      }
+
+      .lever-control:hover {
+        box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+      }
+
+      .lever-control.dragging {
+        box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+        transform: scale(1.02);
+        transition: none;
+      }
+
+      .drag-handle {
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 40px;
+        height: 4px;
+        background: #ccc;
+        border-radius: 2px;
+        cursor: grab;
+      }
+
+      .drag-handle:active {
+        cursor: grabbing;
+      }
+
+      .lever-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+      }
+
+      .lever-track {
+        width: 16px;
+        height: 140px;
+        background: #ddd;
+        border-radius: 8px;
+        position: relative;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 2px solid #bbb;
+      }
+
+      .lever-track:hover {
+        background: #ccc;
+        border-color: #007bff;
+        transform: scale(1.05);
+      }
+
+      .lever-handle {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        border-radius: 50%;
+        position: absolute;
+        left: -12px;
+        top: 15px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        border: 3px solid #ffffff;
+      }
+
+      .lever-handle:hover {
+        background: linear-gradient(135deg, #0056b3, #004085);
+        transform: scale(1.15);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+      }
+
+      .lever-handle.down {
+        top: 85px;
+      }
+
+      .lever-labels {
+        display: flex;
+        flex-direction: column;
+        gap: 35px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #666;
+        text-align: center;
+        min-width: 80px;
+      }
+
+      .lever-label {
+        padding: 8px 12px;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+      }
+
+      .lever-label:hover {
+        background: #f0f8ff;
+        color: #007bff;
+      }
+
+      .lever-label.active {
+        color: #ffffff;
+        background: #007bff;
+        font-weight: 700;
+        box-shadow: 0 2px 8px rgba(0,123,255,0.3);
+      }
+
+      .record-button {
+        padding: 15px 30px;
+        font-size: 18px;
+        font-weight: 600;
+        border-radius: 50px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 120px;
+      }
+
+      .record-button.recording {
+        background: #dc3545;
+        color: white;
+        animation: pulse 1.5s infinite;
+      }
+
+      .record-button:not(.recording) {
+        background: #28a745;
+        color: white;
+      }
+
+      .record-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      }
+
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+      }
     </style>
   </head>
 
@@ -81,6 +246,29 @@
           <button id="endSession" disabled>End Session</button>
         </section>
 
+       
+
+        <!-- Draggable Lever Control -->
+        <div class="lever-control" id="leverControl">
+          <div class="drag-handle" id="dragHandle"></div>
+          
+          <!-- Record Button Above Lever -->
+          <button id="unifiedRecordButton" class="record-button" style="margin-bottom: 20px;">🎤 Record</button>
+          
+          <div class="lever-container">
+            <div class="lever-labels">
+              <span class="lever-label active" id="avatarLabel">🎭 Avatar</span>
+            </div>
+            <div class="lever-track" id="leverTrack">
+              <div class="lever-handle" id="leverHandle"></div>
+            </div>
+            <div class="lever-labels">
+              <span class="lever-label" id="transcriptionLabel">📝 Transcript</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Text Input for Avatar -->
         <section role="group">
           <input
             type="text"
@@ -88,8 +276,9 @@
             placeholder="Type something to talk to the avatar..."
             aria-label="User input"
           />
-          <button id="speakButton" role="button">Speak</button>
+          <button id="speakButton" role="button">Talk</button>
           <button id="repeatButton" role="button">Repeat</button>
+          <button id="stopSpeakingButton" role="button" disabled>🛑 Stop</button>
         </section>
 
         <!-- Transcription Strategy Selection -->
@@ -132,22 +321,19 @@
           </fieldset>
         </section>
 
-        <!-- Audio Transcription Controls -->
-        <section role="group">
-          <button id="startRecordingButton" role="button">🎤 Start Recording</button>
-          <button id="stopRecordingButton" role="button" disabled>⏹️ Stop Recording</button>
-        </section>
 
         <!-- Transcription Output -->
         <section>
           <label for="transcriptionOutput">Live Transcription:</label>
           <textarea
             id="transcriptionOutput"
-            readonly
             placeholder="Transcribed text will appear here..."
             rows="8"
             style="width: 100%; resize: vertical;"
           ></textarea>
+          <button id="saveTranscriptionButton" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            💾 Save Transcription
+          </button>
         </section>
       </section>
     </main>
