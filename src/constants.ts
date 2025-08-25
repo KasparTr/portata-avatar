@@ -1,3 +1,5 @@
+import { AvatarQuality } from "@heygen/streaming-avatar";
+
 /**
  * Transcription Strategy Types
  */
@@ -8,12 +10,18 @@ export const TranscriptionStrategy = {
 
 export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeof TranscriptionStrategy];
 
+export const AVATAR_DEFAULTS = {
+  AVATAR_NAME: "SilasHR_public", //Wayne_20240711
+  AVATAR_QUALITY: AvatarQuality.High,
+  LANGUAGE: "en",
+  KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
+}
 /**
  * Audio Transcription Configuration Constants
  */
 export const AUDIO_TRANSCRIPTION_DEFAULTS = {
   // API Configuration
-  LANGUAGE: 'est',
+  LANGUAGE: 'et', // est
   MODEL: 'scribe_v1',
   
   // Audio Settings
@@ -26,11 +34,11 @@ export const AUDIO_TRANSCRIPTION_DEFAULTS = {
   
   // Transcription Timing
   CHUNK_DURATION: 30000, // Process chunks every 30 seconds (max)
-  MIN_CHUNK_SIZE: 15000, // Minimum 15KB of audio data
+  MIN_CHUNK_SIZE: 5000, // Minimum 5KB of audio data
   
   // Silence Detection
   SILENCE_THRESHOLD: 0.01, // Audio level threshold for silence
-  SILENCE_DURATION: 1000, // 1 second of silence triggers transcription
+  SILENCE_DURATION: 2000, // 1 second of silence triggers transcription
   
   // Audio Analysis
   FFT_SIZE: 256,

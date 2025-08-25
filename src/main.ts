@@ -5,7 +5,7 @@ import StreamingAvatar, {
   VoiceEmotion
 } from "@heygen/streaming-avatar";
 import { AudioTranscriptionService, type TranscriptionResult } from "./audioTranscriptionService";
-import { TranscriptionStrategy, SPEAKER_OPTIONS, KNOWLEDGEBASE } from './constants';
+import { TranscriptionStrategy, SPEAKER_OPTIONS, KNOWLEDGEBASE, AVATAR_DEFAULTS } from './constants';
 import type { TranscriptionStrategyType } from './constants';
 
 // DOM elements
@@ -14,6 +14,7 @@ const startButton = document.getElementById(
   "startSession"
 ) as HTMLButtonElement;
 const endButton = document.getElementById("endSession") as HTMLButtonElement;
+const stopSpeakingButton = document.getElementById("stopSpeaking") as HTMLButtonElement;
 const speakButton = document.getElementById("speakButton") as HTMLButtonElement;
 const repeatButton = document.getElementById("repeatButton") as HTMLButtonElement;
 const userInput = document.getElementById("userInput") as HTMLInputElement;
@@ -29,8 +30,6 @@ const transcriptionLabel = document.getElementById("transcriptionLabel") as HTML
 const leverControl = document.getElementById("leverControl") as HTMLElement;
 const dragHandle = document.getElementById("dragHandle") as HTMLElement;
 
-const KNOWLEDGE_ID = "2b705aff1a834f5c93698641bd29fe5c";
-const AVATAR_NAME = "Wayne_20240711"
 let avatar: StreamingAvatar | null = null;
 let sessionData: any = null;
 let transcriptionService: AudioTranscriptionService | null = null;
@@ -42,6 +41,7 @@ let voiceInputTranscriptionService: AudioTranscriptionService | null = null;
 let isWaitingForVoiceInput: boolean = false;
 let isRecording: boolean = false;
 let recordingMode: 'avatar' | 'transcription' = 'avatar';
+let isAvatarSpeaking: boolean = false;
 
 // Drag functionality variables
 let isDragging = false;
@@ -64,39 +64,71 @@ async function fetchAccessToken(): Promise<string> {
 
 // Initialize streaming avatar session
 async function initializeAvatarSession() {
-  const token = await fetchAccessToken();
-  avatar = new StreamingAvatar({ token });
+  try {
+    console.log("Starting avatar session initialization...");
+    const token = await fetchAccessToken();
+    avatar = new StreamingAvatar({ token });
 
-  avatar.on(StreamingEvents.STREAM_READY, handleStreamReady);
-  avatar.on(StreamingEvents.STREAM_DISCONNECTED, handleStreamDisconnected);
+    avatar.on(StreamingEvents.STREAM_READY, handleStreamReady);
+    avatar.on(StreamingEvents.STREAM_DISCONNECTED, handleStreamDisconnected);
+    avatar.on(StreamingEvents.AVATAR_START_TALKING, handleAvatarStartTalking);
+    avatar.on(StreamingEvents.AVATAR_STOP_TALKING, handleAvatarStopTalking);
 
-  const kb = KNOWLEDGEBASE +  entireTranscript
-  console.log("Knowledge base:", kb)
-  sessionData = await avatar.createStartAvatar({
-    quality: AvatarQuality.High,
-    avatarName: AVATAR_NAME,
-    knowledgeId: KNOWLEDGE_ID,
-    knowledgeBase: kb,
-    // language: "fin",
-    voice: {
-      // voiceId: "1bd001e7e50f421d891986aad5158bc8",
-      rate: 1.0,
-      emotion: VoiceEmotion.FRIENDLY,
-      // elevenlabsSettings: {
-      //   modelId: "eleven_multilingual_v2",
-      //   stability: 0.5,
-      //   similarity_boost: 0.8,
-      //   style: 0.0,
-      //   use_speaker_boost: true
-      // }
-    }
-  });
+    sessionData = await avatar.createStartAvatar({
+      quality: AvatarQuality.High,
+      avatarName: AVATAR_DEFAULTS.AVATAR_NAME,
+      knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID,
+      knowledgeBase: KNOWLEDGEBASE +  entireTranscript,
+      language: AVATAR_DEFAULTS.LANGUAGE,
+      voice: {
+        // voiceId: "1bd001e7e50f421d891986aad5158bc8",
+        rate: 1.0,
+        emotion: VoiceEmotion.FRIENDLY,
+        // elevenlabsSettings: {
+        //   modelId: "eleven_multilingual_v2",
+        //   stability: 0.5,
+        //   similarity_boost: 0.8,
+        //   style: 0.0,
+        //   use_speaker_boost: true
+        // }
+      }
+    });
 
-  console.log("Session data:", sessionData);
+    console.log("Session data:", sessionData);
+    console.log("Avatar session initialized successfully");
 
-  // Enable end button and disable start button
-  endButton.disabled = false;
-  startButton.disabled = true;
+    // Enable start button, keep stop button disabled until avatar speaks
+    endButton.disabled = false;
+    startButton.disabled = true;
+  } catch (error) {
+    console.error("Failed to initialize avatar session:", error);
+    
+    // Reset button states on error
+    endButton.disabled = true;
+    startButton.disabled = false;
+    
+    // Show error to user
+    alert(`Failed to start avatar session: ${error}`);
+  }
+}
+
+// Handle avatar speaking events
+function handleAvatarStartTalking() {
+  console.log("Avatar started talking");
+  isAvatarSpeaking = true;
+  // Enable stop speaking button when avatar starts talking
+  stopSpeakingButton.disabled = false;
+  if (speakButton) speakButton.disabled = true; // Disable speak button
+  if (repeatButton) repeatButton.disabled = true; // Disable repeat button
+}
+
+function handleAvatarStopTalking() {
+  console.log("Avatar stopped talking");
+  isAvatarSpeaking = false;
+  // Disable stop speaking button and re-enable other buttons when avatar stops
+  stopSpeakingButton.disabled = true;
+  if (speakButton) speakButton.disabled = false;
+  if (repeatButton) repeatButton.disabled = false;
 }
 
 // Handle when avatar stream is ready
@@ -123,6 +155,14 @@ function handleStreamDisconnected() {
   endButton.disabled = true;
 }
 
+// Interrupt avatar speaking (without ending session)
+async function interruptAvatar() {
+  if (!avatar || !isAvatarSpeaking) return;
+  
+  console.log("Interrupting avatar speech");
+  await avatar.interrupt();
+}
+
 // End the avatar session
 async function terminateAvatarSession() {
   if (!avatar || !sessionData) return;
@@ -130,6 +170,12 @@ async function terminateAvatarSession() {
   await avatar.stopAvatar();
   videoElement.srcObject = null;
   avatar = null;
+  
+  // Reset button states
+  startButton.disabled = false;
+  endButton.disabled = true;
+  speakButton.disabled = false;
+  repeatButton.disabled = false;
 }
 
 // Handle speaking event
@@ -138,7 +184,8 @@ async function handleSpeak() {
     await avatar.speak({
       text: userInput.value,
     });
-    userInput.value = ""; // Clear input after speaking
+    // Keep the text in input field for user to see and potentially edit
+    // userInput.value = ""; // Don't clear input after speaking
   }
 }
 
@@ -307,10 +354,13 @@ async function handleUnifiedRecord() {
       }
       
       try {
+        // Force reset state to prevent "Recording already in progress" error
+        voiceInputTranscriptionService.forceResetState();
+        
         await voiceInputTranscriptionService.startRecording(
           (result: TranscriptionResult) => {
+            console.log('Voice input result:', result.text);
             userInput.value = result.text;
-            console.log('Voice transcription result:', result.text);
             
             if (isWaitingForVoiceInput) {
               isWaitingForVoiceInput = false;
@@ -324,6 +374,8 @@ async function handleUnifiedRecord() {
               // Trigger avatar to speak if there's text
               if (userInput.value.trim()) {
                 handleSpeak();
+              } else {
+                console.log('No voice input detected or audio too short');
               }
             }
           },
@@ -401,6 +453,17 @@ async function handleUnifiedRecord() {
         await voiceInputTranscriptionService.stopRecording();
       }
       unifiedRecordButton.textContent = '🎤 Processing...';
+      
+      // Add timeout to reset button state if transcription takes too long or fails
+      setTimeout(() => {
+        if (isWaitingForVoiceInput) {
+          console.log('Transcription timeout - resetting button state');
+          isWaitingForVoiceInput = false;
+          isRecording = false;
+          unifiedRecordButton.classList.remove('recording');
+          unifiedRecordButton.textContent = '🎤 Record';
+        }
+      }, 10000); // 10 second timeout
     } else {
       // Lock speaker at stop time for on-demand transcription
       if (currentStrategy === TranscriptionStrategy.ON_DEMAND) {
@@ -521,7 +584,8 @@ async function initializeVoiceInputTranscriptionService() {
 
   voiceInputTranscriptionService = new AudioTranscriptionService({
     apiKey: elevenlabsApiKey,
-    strategy: TranscriptionStrategy.ON_DEMAND // Always use on-demand for voice input
+    strategy: TranscriptionStrategy.ON_DEMAND, // Always use on-demand for voice input
+    minChunkSize: 1000 // Lower threshold for voice input (1KB instead of 15KB)
   });
 
   try {
@@ -653,6 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Event listeners for buttons
 startButton.addEventListener("click", initializeAvatarSession);
 endButton.addEventListener("click", terminateAvatarSession);
+stopSpeakingButton.addEventListener("click", interruptAvatar);
 speakButton.addEventListener("click", handleSpeak);
 repeatButton.addEventListener("click", handleRepeat);
 startRecordingButton.addEventListener("click", handleStartTranscription);

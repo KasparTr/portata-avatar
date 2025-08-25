@@ -71,14 +71,62 @@ export class AudioTranscriptionService {
       }
       
       console.log('Using audio format:', mimeType);
-      this.mediaRecorder = new MediaRecorder(this.audioStream, { mimeType });
-
-      this.setupMediaRecorderEvents();
+      await this.createMediaRecorder();
       
       // Set up audio analysis for silence detection
       await this.setupAudioAnalysis();
     } catch (error) {
       throw new Error(`Failed to initialize audio: ${error}`);
+    }
+  }
+
+  /**
+   * Create or recreate MediaRecorder instance
+   */
+  private async createMediaRecorder(): Promise<void> {
+    // Check if audio stream is still active, reinitialize if needed
+    if (!this.audioStream || this.audioStream.getTracks().every(track => track.readyState === 'ended')) {
+      console.log('Audio stream ended, reinitializing...');
+      await this.reinitializeAudioStream();
+    }
+
+    if (!this.audioStream) {
+      throw new Error('Audio stream not available');
+    }
+
+    // Try different audio formats, prioritizing more compatible formats
+    let mimeType: string = AUDIO_TRANSCRIPTION_DEFAULTS.PREFERRED_MIME_TYPES[0];
+    for (const preferredType of AUDIO_TRANSCRIPTION_DEFAULTS.PREFERRED_MIME_TYPES) {
+      if (MediaRecorder.isTypeSupported(preferredType)) {
+        mimeType = preferredType;
+        break;
+      }
+    }
+    
+    console.log('Creating MediaRecorder with format:', mimeType);
+    this.mediaRecorder = new MediaRecorder(this.audioStream, { mimeType });
+    this.setupMediaRecorderEvents();
+  }
+
+  /**
+   * Reinitialize audio stream after tracks have been stopped
+   */
+  private async reinitializeAudioStream(): Promise<void> {
+    try {
+      this.audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: this.config.sampleRate,
+          channelCount: AUDIO_TRANSCRIPTION_DEFAULTS.CHANNEL_COUNT,
+          echoCancellation: AUDIO_TRANSCRIPTION_DEFAULTS.ECHO_CANCELLATION,
+          noiseSuppression: AUDIO_TRANSCRIPTION_DEFAULTS.NOISE_SUPPRESSION,
+          autoGainControl: AUDIO_TRANSCRIPTION_DEFAULTS.AUTO_GAIN_CONTROL
+        }
+      });
+      
+      // Reinitialize audio analysis
+      await this.setupAudioAnalysis();
+    } catch (error) {
+      throw new Error(`Failed to reinitialize audio stream: ${error}`);
     }
   }
 
@@ -89,12 +137,22 @@ export class AudioTranscriptionService {
     onTranscription: (result: TranscriptionResult) => void,
     onError?: (error: Error) => void
   ): Promise<void> {
-    if (!this.mediaRecorder || !this.audioStream) {
+    if (!this.audioStream) {
       throw new Error('Audio service not initialized. Call initialize() first.');
     }
 
     if (this.isRecording) {
       throw new Error('Recording already in progress');
+    }
+
+    // Recreate MediaRecorder if it's null or in an unusable state
+    if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+      console.log('Recreating MediaRecorder for new recording session');
+      await this.createMediaRecorder();
+    }
+
+    if (!this.mediaRecorder) {
+      throw new Error('Failed to create MediaRecorder');
     }
 
     this.onTranscriptionCallback = onTranscription;
@@ -118,8 +176,31 @@ export class AudioTranscriptionService {
     if (this.mediaRecorder && this.isRecording) {
       this.mediaRecorder.stop();
       this.isRecording = false;
+      
+      // Stop all audio tracks to remove browser recording indicator
+      if (this.audioStream) {
+        this.audioStream.getTracks().forEach(track => {
+          track.stop();
+          console.log('Stopped audio track:', track.kind);
+        });
+      }
+      
       // processAccumulatedAudio will be called by onstop event
     }
+  }
+
+  /**
+   * Force reset recording state (for error recovery)
+   */
+  forceResetState(): void {
+    console.log('Force resetting recording state');
+    this.isRecording = false;
+    this.audioChunks = [];
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      this.mediaRecorder.stop();
+    }
+    // Reset MediaRecorder to null so it gets recreated on next recording
+    this.mediaRecorder = null;
   }
 
   /**
@@ -174,6 +255,7 @@ export class AudioTranscriptionService {
 
     this.mediaRecorder.onstop = () => {
       console.log('Recording stopped, processing complete audio file');
+      this.isRecording = false; // Ensure state is reset
       if (this.audioChunks.length > 0) {
         this.processCompleteAudioFile();
       }
@@ -330,7 +412,11 @@ export class AudioTranscriptionService {
   }
 
   private async processCompleteAudioFile(): Promise<void> {
-    if (this.audioChunks.length === 0) {
+    console.log('Processing complete audio file...');
+    console.log('Audio chunks available:', this.audioChunks.length);
+    console.log('Callback available:', !!this.onTranscriptionCallback);
+    
+    if (!this.audioChunks.length) {
       console.log('No audio chunks to process');
       return;
     }
@@ -347,18 +433,29 @@ export class AudioTranscriptionService {
       const completeAudioBlob = new Blob(this.audioChunks, { type: mimeType });
       
       console.log(`Processing complete audio file: ${completeAudioBlob.size} bytes from ${this.audioChunks.length} chunks, type: ${mimeType}`);
+      console.log(`Min chunk size threshold: ${this.config.minChunkSize || AUDIO_TRANSCRIPTION_DEFAULTS.MIN_CHUNK_SIZE} bytes`);
       
       if (completeAudioBlob.size > (this.config.minChunkSize || AUDIO_TRANSCRIPTION_DEFAULTS.MIN_CHUNK_SIZE)) {
+        console.log('Audio size sufficient, starting transcription...');
         const transcription = await this.transcribeAudio(completeAudioBlob);
+        console.log('Transcription result:', transcription);
         
-        if (transcription.text && transcription.text.trim() && this.onTranscriptionCallback) {
+        if (this.onTranscriptionCallback) {
+          console.log('Calling transcription callback with result:', transcription.text);
           this.onTranscriptionCallback(transcription);
+        } else {
+          console.log('No transcription callback available');
         }
       } else {
         console.log('Complete audio file too small for transcription');
+        // Still call the callback with empty result to reset UI state
+        if (this.onTranscriptionCallback) {
+          this.onTranscriptionCallback({ text: '', confidence: 0 });
+        }
       }
     } catch (error) {
       console.error('Error processing complete audio file:', error);
+      this.isRecording = false; // Reset state on error
       if (this.onErrorCallback) {
         this.onErrorCallback(error as Error);
       }
@@ -379,30 +476,35 @@ export class AudioTranscriptionService {
 
     console.log('Sending transcription request to ElevenLabs API with filename:', filename);
     
-    const response = await fetch(API_ENDPOINTS.ELEVENLABS_SPEECH_TO_TEXT, {
-      method: 'POST',
-      headers: {
-        'xi-api-key': this.config.apiKey
-      },
-      body: formData
-    });
+    try {
+      const response = await fetch(API_ENDPOINTS.ELEVENLABS_SPEECH_TO_TEXT, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': this.config.apiKey
+        },
+        body: formData
+      });
+      
+      console.log('API Response:', response);
     
-    console.log('API Response status:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API Error response:', errorText);
-      throw new Error(`Transcription failed: Error: ElevenLabs API error: ${response.status} - ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error response:', errorText);
+        throw new Error(`Transcription failed: Error: ElevenLabs API error: ${response.status} - ${errorText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Transcription API result:', result);
+      
+      return {
+        text: result.text || '',
+        confidence: result.confidence,
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      console.error('Transcription API call failed:', error);
+      throw error;
     }
-    
-    const result = await response.json();
-    console.log('Transcription API result:', result);
-    
-    return {
-      text: result.text || '',
-      confidence: result.confidence,
-      timestamp: Date.now()
-    };
   }
 
   /**
