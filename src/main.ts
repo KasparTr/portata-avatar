@@ -72,27 +72,18 @@ async function initializeAvatarSession() {
     avatar.on(StreamingEvents.STREAM_READY, handleStreamReady);
     avatar.on(StreamingEvents.STREAM_DISCONNECTED, handleStreamDisconnected);
     avatar.on(StreamingEvents.AVATAR_START_TALKING, handleAvatarStartTalking);
-    avatar.on(StreamingEvents.AVATAR_STOP_TALKING, handleAvatarStopTalking);
+    // Get latest transcription content from the text area
+    const latestTranscript = transcriptionOutput.value || entireTranscript;
+    console.log("Live transcription content:", transcriptionOutput.value);
+    console.log("Entire transcript variable:", );
+    console.log("Using transcript:", latestTranscript);
+    let kb = KNOWLEDGEBASE
+    if(entireTranscript) kb += entireTranscript
+    else if (latestTranscript) kb += latestTranscript
 
-    sessionData = await avatar.createStartAvatar({
-      quality: AvatarQuality.High,
-      avatarName: AVATAR_DEFAULTS.AVATAR_NAME,
-      knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID,
-      knowledgeBase: KNOWLEDGEBASE +  entireTranscript,
-      language: AVATAR_DEFAULTS.LANGUAGE,
-      voice: {
-        // voiceId: "1bd001e7e50f421d891986aad5158bc8",
-        rate: 1.0,
-        emotion: VoiceEmotion.FRIENDLY,
-        // elevenlabsSettings: {
-        //   modelId: "eleven_multilingual_v2",
-        //   stability: 0.5,
-        //   similarity_boost: 0.8,
-        //   style: 0.0,
-        //   use_speaker_boost: true
-        // }
-      }
-    });
+    console.log("Knowledgebase: ", kb);
+    const ac = createAvatarConfig(kb)
+    sessionData = await avatar.createStartAvatar(ac);
 
     console.log("Session data:", sessionData);
     console.log("Avatar session initialized successfully");
@@ -112,6 +103,25 @@ async function initializeAvatarSession() {
   }
 }
 
+
+function createAvatarConfig(knowledgeBase: string){
+  const config = {
+    quality: AvatarQuality.High,
+    avatarName: AVATAR_DEFAULTS.AVATAR_NAME,
+    // knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID,
+    knowledgeBase: knowledgeBase,
+    language: AVATAR_DEFAULTS.LANGUAGE,
+    voice: {}
+  }
+  if(AVATAR_DEFAULTS.VOICE_ID){
+    config.voice = {
+      voiceId:AVATAR_DEFAULTS.VOICE_ID,
+      rate: AVATAR_DEFAULTS.VOICE_RATE,
+      // emotion: VoiceEmotion.FRIENDLY,
+    }
+  }
+  return config
+}
 // Handle avatar speaking events
 function handleAvatarStartTalking() {
   console.log("Avatar started talking");

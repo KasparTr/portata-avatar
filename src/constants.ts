@@ -10,11 +10,17 @@ export const TranscriptionStrategy = {
 
 export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeof TranscriptionStrategy];
 
+const Voices = {
+  EE_KERT: "adc699478776486997dcf2f7b1534a89",
+  EE_ANU: "088b81175b7b4dcabc7179a94467dd06"
+}
 export const AVATAR_DEFAULTS = {
-  AVATAR_NAME: "SilasHR_public", //Wayne_20240711
+  AVATAR_NAME: "Katya_Chair_Sitting_public", //Wayne_20240711, Graham_Chair_Sitting_public, SilasHR_public, Katya_Chair_Sitting_public,Thaddeus_Chair_Sitting_public
   AVATAR_QUALITY: AvatarQuality.High,
-  LANGUAGE: "en",
+  VOICE_RATE: 1.0,
+  LANGUAGE: "en", // en
   KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
+  VOICE_ID:Voices.EE_ANU
 }
 /**
  * Audio Transcription Configuration Constants
@@ -85,4 +91,4 @@ export const AUDIO_FILE_EXTENSIONS = {
   'audio/ogg': 'audio.ogg'
 } as const;
 
-export const KNOWLEDGEBASE = "Instructions: You are a panelist, taking part of a five member panel. The panel is part of the Telia Digital Hub conference. Panel Moderator Tõnis is leading the panel. When prompted, form a short opinion based on the transcript of the ongoing panel discussion (is available) and your own knowledge. Keep the answer strictly on topic and around the conference theme (below). Always reply in English language, regardless of prompt language. #Conference theme: []. # Transcript: "
+export const KNOWLEDGEBASE = "Instructions: You are a panelist, taking part of a five member panel. The panel is part of the Telia Digital Hub conference. Panel Moderator Tõnis is leading the panel. When prompted, form a short opinion based on the transcript of the ongoing panel discussion (is available) and your own knowledge. Keep the answer strictly on topic and around the conference theme (below). Always reply in Estonian language, regardless of prompt language. #Conference theme: []. # Transcript: "
