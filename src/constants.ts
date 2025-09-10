@@ -9,25 +9,42 @@ export const TranscriptionStrategy = {
 } as const;
 
 export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeof TranscriptionStrategy];
-
-const Voices = {
+let AVATAR_VOICE_LANGUAGE = "en" // "et"
+let TRANSCRIPTION_LANGUAGE = "et"; // "en"
+let avatarName = "Thaddeus_Chair_Sitting_public";
+let AVATAR_GENDER = "female" // "male"
+const AVAILABLE_VOICE_IDS = {
   EE_KERT: "adc699478776486997dcf2f7b1534a89",
-  EE_ANU: "088b81175b7b4dcabc7179a94467dd06"
+  EE_ANU: "088b81175b7b4dcabc7179a94467dd06",
+  EN_LEMBIT:"dcbce63bc1114c8fa9155bb6538d6edb",
+  EN_IVY:"cef3bc4e0a84424cafcde6f2cf466c97"
 }
+
+let voiceId = AVAILABLE_VOICE_IDS.EE_ANU;
+if(AVATAR_GENDER === "male"){
+  avatarName = "Thaddeus_Chair_Sitting_public";
+  if(AVATAR_VOICE_LANGUAGE == "et") voiceId = AVAILABLE_VOICE_IDS.EE_KERT;
+  else voiceId = AVAILABLE_VOICE_IDS.EN_LEMBIT;
+} else {
+  avatarName = "Katya_Chair_Sitting_public";
+  if(AVATAR_VOICE_LANGUAGE == "et") voiceId = AVAILABLE_VOICE_IDS.EE_ANU;
+  else voiceId = AVAILABLE_VOICE_IDS.EN_IVY;
+}
+  
 export const AVATAR_DEFAULTS = {
-  AVATAR_NAME: "Katya_Chair_Sitting_public", //Wayne_20240711, Graham_Chair_Sitting_public, SilasHR_public, Katya_Chair_Sitting_public,Thaddeus_Chair_Sitting_public
+  AVATAR_NAME: avatarName, //Wayne_20240711, Graham_Chair_Sitting_public, SilasHR_public, Katya_Chair_Sitting_public,Thaddeus_Chair_Sitting_public
   AVATAR_QUALITY: AvatarQuality.High,
   VOICE_RATE: 1.0,
-  LANGUAGE: "en", // en
+  LANGUAGE: AVATAR_VOICE_LANGUAGE,
   KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
-  VOICE_ID:Voices.EE_ANU
+  VOICE_ID:voiceId
 }
 /**
  * Audio Transcription Configuration Constants
  */
 export const AUDIO_TRANSCRIPTION_DEFAULTS = {
   // API Configuration
-  LANGUAGE: 'et', // est
+  LANGUAGE: TRANSCRIPTION_LANGUAGE,
   MODEL: 'scribe_v1',
   
   // Audio Settings
@@ -72,8 +89,8 @@ export const SPEAKER_NAMES = {
   // RAIVO: 'Raivo', 
   RAINA: 'Raina',
   MODERATOR: 'moderator',
-  MODE_NAME: 'Mait',
-  MODERATOR_FULL: 'Moderaator, Mait'
+  MODE_NAME: 'Kaspar',
+  MODERATOR_FULL: 'Moderaator, Kaspar'
 } as const;
 
 /**
