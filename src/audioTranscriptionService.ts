@@ -5,6 +5,7 @@ export interface TranscriptionResult {
   text: string;
   confidence?: number;
   timestamp?: number;
+  speaker?: string;
 }
 
 export interface AudioTranscriptionConfig {
@@ -24,13 +25,19 @@ export class AudioTranscriptionService {
   private audioStream: MediaStream | null = null;
   private isRecording = false;
   private config: AudioTranscriptionConfig;
-  private audioChunks: Blob[] = [];
+  private currentBuffer: Blob[] = [];
+  private processingBuffer: Blob[] = [];
   private onTranscriptionCallback?: (result: TranscriptionResult) => void;
   private onErrorCallback?: (error: Error) => void;
-  private audioContext: AudioContext | null = null;
-  private analyser: AnalyserNode | null = null;
+  private lastSoundTime: number = 0;
   private silenceTimer: NodeJS.Timeout | null = null;
-  private lastSoundTime = 0;
+  private maxBatchTimer: NodeJS.Timeout | null = null;
+  private audioAnalyzer: AnalyserNode | null = null;
+  private audioContext: AudioContext | null = null;
+  private batchStartTime: number = 0;
+  private isProcessingTranscription: boolean = false;
+  private currentSpeaker: string = '';
+  private getSpeakerCallback?: () => string;
 
   constructor(config: AudioTranscriptionConfig) {
     this.config = {
@@ -135,7 +142,8 @@ export class AudioTranscriptionService {
    */
   async startRecording(
     onTranscription: (result: TranscriptionResult) => void,
-    onError?: (error: Error) => void
+    onError?: (error: Error) => void,
+    getSpeaker?: () => string
   ): Promise<void> {
     if (!this.audioStream) {
       throw new Error('Audio service not initialized. Call initialize() first.');
@@ -157,23 +165,26 @@ export class AudioTranscriptionService {
 
     this.onTranscriptionCallback = onTranscription;
     this.onErrorCallback = onError;
-    this.audioChunks = [];
+    this.getSpeakerCallback = getSpeaker;
+    this.currentBuffer = [];
     this.isRecording = true;
 
     // Start continuous recording with timeslice to get periodic data
     this.mediaRecorder.start(AUDIO_TRANSCRIPTION_DEFAULTS.MEDIA_RECORDER_TIMESLICE);
     
-    // Schedule periodic chunk processing only for real-time strategy
-    if (this.config.strategy === TranscriptionStrategy.REAL_TIME) {
-      this.scheduleChunkProcessing();
-    }
+    // Set up continuous batch processing
+    console.log('🎤 Setting up continuous batch processing...');
+    await this.setupAudioAnalysis();
+    this.startSilenceDetection();
   }
 
   /**
    * Stop audio recording and trigger transcription
    */
   async stopRecording(): Promise<void> {
+    console.log('🎤 stopRecording called, isRecording:', this.isRecording);
     if (this.mediaRecorder && this.isRecording) {
+      console.log('🎤 Stopping MediaRecorder...');
       this.mediaRecorder.stop();
       this.isRecording = false;
       
@@ -185,7 +196,10 @@ export class AudioTranscriptionService {
         });
       }
       
+      console.log('🎤 MediaRecorder stopped, waiting for onstop event to trigger transcription');
       // processAccumulatedAudio will be called by onstop event
+    } else {
+      console.log('🎤 No recording to stop or MediaRecorder not available');
     }
   }
 
@@ -195,7 +209,7 @@ export class AudioTranscriptionService {
   forceResetState(): void {
     console.log('Force resetting recording state');
     this.isRecording = false;
-    this.audioChunks = [];
+    this.currentBuffer = [];
     if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
       this.mediaRecorder.stop();
     }
@@ -207,9 +221,8 @@ export class AudioTranscriptionService {
    * Manually trigger transcription of current audio buffer
    */
   async transcribeCurrentBuffer(): Promise<void> {
-    if (this.isRecording && this.audioChunks.length > 0) {
-      await this.processCompleteAudioFile();
-      this.audioChunks = []; // Clear buffer after transcription
+    if (this.isRecording && this.currentBuffer.length > 0) {
+      await this.switchBuffer();
     }
   }
 
@@ -227,13 +240,17 @@ export class AudioTranscriptionService {
       this.silenceTimer = null;
     }
     
-    // Clean up audio analysis
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
+    // Clean up max batch timer
+    if (this.maxBatchTimer) {
+      clearTimeout(this.maxBatchTimer);
+      this.maxBatchTimer = null;
     }
     
-    this.analyser = null;
+    // Clean up audio analysis
+    if (this.audioAnalyzer) {
+      this.audioAnalyzer.disconnect();
+      this.audioAnalyzer = null;
+    }
     
     if (this.audioStream) {
       this.audioStream.getTracks().forEach(track => track.stop());
@@ -248,17 +265,15 @@ export class AudioTranscriptionService {
 
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
-        this.audioChunks.push(event.data);
-        console.log(`Audio chunk received: ${event.data.size} bytes, total chunks: ${this.audioChunks.length}`);
+        this.currentBuffer.push(event.data);
+        console.log(`Audio chunk received: ${event.data.size} bytes, total chunks: ${this.currentBuffer.length}`);
       }
     };
 
+    // Remove onstop handler - we'll process batches asynchronously
     this.mediaRecorder.onstop = () => {
-      console.log('Recording stopped, processing complete audio file');
-      this.isRecording = false; // Ensure state is reset
-      if (this.audioChunks.length > 0) {
-        this.processCompleteAudioFile();
-      }
+      console.log('🎤 MediaRecorder stopped');
+      this.isRecording = false;
     };
   }
 
@@ -267,7 +282,7 @@ export class AudioTranscriptionService {
    */
   getRecordingDuration(): number {
     // Calculate total size of audio chunks as a rough estimate
-    const totalSize = this.audioChunks.reduce((sum, chunk) => sum + chunk.size, 0);
+    const totalSize = this.currentBuffer.reduce((sum, chunk) => sum + chunk.size, 0);
     return totalSize > 0 ? Math.max(1000, totalSize / 100) : 0; // Rough estimate based on size
   }
 
@@ -275,108 +290,66 @@ export class AudioTranscriptionService {
    * Check if enough audio has been collected for meaningful transcription
    */
   hasMinimumAudio(): boolean {
-    const totalSize = this.audioChunks.reduce((sum, chunk) => sum + chunk.size, 0);
-    return this.audioChunks.length > 0 && totalSize >= (this.config.minChunkSize || AUDIO_TRANSCRIPTION_DEFAULTS.MIN_CHUNK_SIZE);
-  }
-
-  /**
-   * Schedule periodic recording restart for clean audio segments (real-time only)
-   */
-  private scheduleChunkProcessing(): void {
-    if (!this.isRecording || this.config.strategy !== TranscriptionStrategy.REAL_TIME) return;
-
-    // Start silence detection
-    this.startSilenceDetection();
-
-    // Fallback timer for maximum chunk duration
-    setTimeout(() => {
-      if (this.isRecording && this.config.strategy === TranscriptionStrategy.REAL_TIME) {
-        console.log('「⩇⩇:⩇⩇」 Max duration reached, forcing transcription');
-        this.restartRecordingForTranscription();
-      }
-      
-      // Continue scheduling if still recording
-      if (this.isRecording && this.config.strategy === TranscriptionStrategy.REAL_TIME) {
-        this.scheduleChunkProcessing();
-      }
-    }, this.config.chunkDuration || AUDIO_TRANSCRIPTION_DEFAULTS.CHUNK_DURATION);
-  }
-
-  /**
-   * Restart recording to create a complete audio file for transcription
-   */
-  private async restartRecordingForTranscription(): Promise<void> {
-    if (!this.mediaRecorder || !this.audioStream || !this.isRecording) return;
-
-    try {
-      // Stop current recording to get a complete audio file
-      this.mediaRecorder.stop();
-      
-      // Wait a bit for the stop event to process
-      setTimeout(() => {
-        if (this.isRecording && this.audioStream) {
-          // Start a new recording session
-          const mimeType = this.mediaRecorder?.mimeType || 'audio/wav';
-          this.mediaRecorder = new MediaRecorder(this.audioStream, { mimeType });
-          this.setupMediaRecorderEvents();
-          this.audioChunks = []; // Clear for new recording
-          this.mediaRecorder.start(AUDIO_TRANSCRIPTION_DEFAULTS.MEDIA_RECORDER_TIMESLICE);
-          console.log('Recording restarted for continuous transcription');
-          
-          // Restart silence detection
-          this.startSilenceDetection();
-        }
-      }, AUDIO_TRANSCRIPTION_DEFAULTS.RESTART_DELAY);
-    } catch (error) {
-      console.error('Error restarting recording:', error);
-      if (this.onErrorCallback) {
-        this.onErrorCallback(error as Error);
-      }
-    }
+    const totalSize = this.currentBuffer.reduce((sum, chunk) => sum + chunk.size, 0);
+    return this.currentBuffer.length > 0 && totalSize >= (this.config.minChunkSize || AUDIO_TRANSCRIPTION_DEFAULTS.MIN_CHUNK_SIZE);
   }
 
   /**
    * Set up audio analysis for silence detection
    */
   private async setupAudioAnalysis(): Promise<void> {
+    if (!this.audioStream) {
+      console.log('No audio stream available for analysis');
+      return;
+    }
+
     try {
       this.audioContext = new AudioContext();
-      this.analyser = this.audioContext.createAnalyser();
-      
-      if (this.audioStream) {
-        const source = this.audioContext.createMediaStreamSource(this.audioStream);
-        source.connect(this.analyser);
-        
-        this.analyser.fftSize = AUDIO_TRANSCRIPTION_DEFAULTS.FFT_SIZE;
-        console.log('Audio analysis setup complete for silence detection');
-      }
+      const source = this.audioContext.createMediaStreamSource(this.audioStream);
+      this.audioAnalyzer = this.audioContext.createAnalyser();
+      this.audioAnalyzer.fftSize = AUDIO_TRANSCRIPTION_DEFAULTS.FFT_SIZE || 256;
+      source.connect(this.audioAnalyzer);
+      console.log('🎤 Audio analysis setup complete for silence detection');
     } catch (error) {
-      console.warn('Could not set up audio analysis for silence detection:', error);
+      console.error('Error setting up audio analysis:', error);
     }
   }
 
   /**
-   * Start monitoring audio levels for silence detection (real-time only)
+   * Start silence detection and 20-second timer for buffer switching
    */
   private startSilenceDetection(): void {
-    if (!this.analyser || !this.isRecording || this.config.strategy !== TranscriptionStrategy.REAL_TIME) return;
+    if (!this.audioAnalyzer || !this.isRecording) {
+      console.log('🎤 Cannot start silence detection - missing requirements');
+      return;
+    }
 
-    const bufferLength = this.analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
+    console.log('🎤 Starting silence detection monitoring for buffer switching');
+    
+    // Start 20-second max timer
+    this.startMaxBatchTimer();
     
     const checkAudioLevel = () => {
-      if (!this.isRecording || !this.analyser) return;
-      
-      this.analyser.getByteFrequencyData(dataArray);
-      
-      // Calculate average audio level
-      const average = dataArray.reduce((sum, value) => sum + value, 0) / bufferLength;
-      const normalizedLevel = average / 255;
-      
+      if (!this.audioAnalyzer || !this.isRecording) {
+        console.log('🎤 Stopping silence detection - no analyzer or not recording');
+        return;
+      }
+
+      const bufferLength = this.audioAnalyzer.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      this.audioAnalyzer.getByteFrequencyData(dataArray);
+
+      // Calculate average volume
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+      }
+      const average = sum / bufferLength / 255; // Normalize to 0-1
+
       const now = Date.now();
-      
-      if (normalizedLevel > (this.config.silenceThreshold || AUDIO_TRANSCRIPTION_DEFAULTS.SILENCE_THRESHOLD)) {
-        // Sound detected
+
+      if (average > (this.config.silenceThreshold || AUDIO_TRANSCRIPTION_DEFAULTS.SILENCE_THRESHOLD)) {
+        // Sound detected, update last sound time
         this.lastSoundTime = now;
         
         // Clear any existing silence timer
@@ -388,12 +361,12 @@ export class AudioTranscriptionService {
         // Silence detected
         const silenceDuration = now - this.lastSoundTime;
         
-        if (silenceDuration > (this.config.silenceDuration || AUDIO_TRANSCRIPTION_DEFAULTS.SILENCE_DURATION) && !this.silenceTimer && this.config.strategy === TranscriptionStrategy.REAL_TIME) {
-          console.log(`༄ Silence detected for ${silenceDuration}ms, triggering transcription`);
+        if (silenceDuration > (this.config.silenceDuration || AUDIO_TRANSCRIPTION_DEFAULTS.SILENCE_DURATION) && !this.silenceTimer) {
+          console.log(`🎤 Silence detected for ${silenceDuration}ms, switching buffer`);
           this.silenceTimer = setTimeout(() => {
-            if (this.isRecording && this.audioChunks.length > 0 && this.config.strategy === TranscriptionStrategy.REAL_TIME) {
-              console.log('༄ Silence-triggered transcription');
-              this.restartRecordingForTranscription();
+            if (this.isRecording && this.currentBuffer.length > 0) {
+              console.log('🎤 Silence-triggered buffer switch');
+              this.switchBuffer();
             }
             this.silenceTimer = null;
           }, AUDIO_TRANSCRIPTION_DEFAULTS.TRANSCRIPTION_TRIGGER_DELAY);
@@ -411,54 +384,131 @@ export class AudioTranscriptionService {
     checkAudioLevel();
   }
 
-  private async processCompleteAudioFile(): Promise<void> {
-    console.log('Processing complete audio file...');
-    console.log('Audio chunks available:', this.audioChunks.length);
-    console.log('Callback available:', !!this.onTranscriptionCallback);
+  /**
+   * Start the 20-second max batch timer
+   */
+  private startMaxBatchTimer(): void {
+    if (this.maxBatchTimer) {
+      clearTimeout(this.maxBatchTimer);
+    }
     
-    if (!this.audioChunks.length) {
-      console.log('No audio chunks to process');
+    this.maxBatchTimer = setTimeout(() => {
+      console.log('🎤 20-second max duration reached, switching buffer');
+      if (this.isRecording && this.currentBuffer.length > 0) {
+        this.switchBuffer();
+      }
+      // Restart timer for next batch
+      this.startMaxBatchTimer();
+    }, AUDIO_TRANSCRIPTION_DEFAULTS.MAX_BATCH_DURATION);
+  }
+
+  /**
+   * Trigger buffer switch manually (e.g., on speaker change)
+   */
+  public triggerBufferSwitch(previousSpeaker?: string): void {
+    if (this.isRecording && this.currentBuffer.length > 0) {
+      this.switchBuffer(previousSpeaker);
+    }
+  }
+
+  /**
+   * Switch buffer for processing while continuing to record
+   */
+  private async switchBuffer(overrideSpeaker?: string): Promise<void> {
+    if (this.isProcessingTranscription || this.currentBuffer.length === 0 || !this.mediaRecorder) {
       return;
     }
 
-    try {
-      // Clear silence timer when processing
-      if (this.silenceTimer) {
-        clearTimeout(this.silenceTimer);
-        this.silenceTimer = null;
+    console.log('🎤 Switching buffer - stopping MediaRecorder to finalize audio file');
+    
+    this.isProcessingTranscription = true;
+    
+    // Stop MediaRecorder to finalize the current audio file
+    if (this.mediaRecorder.state === 'recording') {
+      this.mediaRecorder.stop();
+      
+      // Capture current speaker at the moment of buffer switch
+      this.currentSpeaker = overrideSpeaker || (this.getSpeakerCallback ? this.getSpeakerCallback() : '');
+      
+      // Wait for stop event and process the finalized audio
+      await new Promise<void>((resolve) => {
+        const originalOnStop = this.mediaRecorder!.onstop;
+        this.mediaRecorder!.onstop = async () => {
+          console.log('🎤 MediaRecorder stopped, processing finalized audio');
+          
+          if (this.currentBuffer.length > 0) {
+            // Move to processing buffer
+            this.processingBuffer = [...this.currentBuffer];
+            this.currentBuffer = [];
+          }
+          
+          // Restore original handler
+          if (originalOnStop) {
+            this.mediaRecorder!.onstop = originalOnStop;
+          }
+          
+          resolve();
+        };
+      });
+      
+      // Immediately restart recording to minimize gap
+      if (this.isRecording) {
+        await this.createMediaRecorder();
+        if (this.mediaRecorder) {
+          this.mediaRecorder.start(AUDIO_TRANSCRIPTION_DEFAULTS.MEDIA_RECORDER_TIMESLICE);
+          console.log('🎤 MediaRecorder restarted for continuous recording');
+        }
       }
-      
-      // Create a complete audio file from all chunks (this should be a valid file now)
+    }
+    
+    this.isProcessingTranscription = false;
+    
+    // Process the buffer after releasing the flag
+    if (this.processingBuffer.length > 0) {
+      this.processBufferAsync();
+    }
+  }
+
+  /**
+   * Process buffer asynchronously while recording continues
+   */
+  private async processBufferAsync(): Promise<void> {
+    if (this.isProcessingTranscription || this.processingBuffer.length === 0) {
+      return;
+    }
+
+    this.isProcessingTranscription = true;
+    console.log('🎤 Processing buffer asynchronously:', this.processingBuffer.length, 'chunks');
+
+    try {
       const mimeType = this.mediaRecorder?.mimeType || 'audio/wav';
-      const completeAudioBlob = new Blob(this.audioChunks, { type: mimeType });
+      const audioBlob = new Blob(this.processingBuffer, { type: mimeType });
       
-      console.log(`Processing complete audio file: ${completeAudioBlob.size} bytes from ${this.audioChunks.length} chunks, type: ${mimeType}`);
-      console.log(`Min chunk size threshold: ${this.config.minChunkSize || AUDIO_TRANSCRIPTION_DEFAULTS.MIN_CHUNK_SIZE} bytes`);
-      
-      if (completeAudioBlob.size > (this.config.minChunkSize || AUDIO_TRANSCRIPTION_DEFAULTS.MIN_CHUNK_SIZE)) {
-        console.log('Audio size sufficient, starting transcription...');
-        const transcription = await this.transcribeAudio(completeAudioBlob);
-        console.log('Transcription result:', transcription);
+      if (audioBlob.size > (this.config.minChunkSize || AUDIO_TRANSCRIPTION_DEFAULTS.MIN_CHUNK_SIZE)) {
+        console.log('🎤 Transcribing buffer:', audioBlob.size, 'bytes');
+        const transcription = await this.transcribeAudio(audioBlob);
         
-        if (this.onTranscriptionCallback) {
-          console.log('Calling transcription callback with result:', transcription.text);
-          this.onTranscriptionCallback(transcription);
-        } else {
-          console.log('No transcription callback available');
+        if (this.onTranscriptionCallback && transcription.text && transcription.text.trim() !== '') {
+          // Add speaker info to transcription result
+          const resultWithSpeaker = {
+            ...transcription,
+            speaker: this.currentSpeaker
+          };
+          this.onTranscriptionCallback(resultWithSpeaker);
         }
       } else {
-        console.log('Complete audio file too small for transcription');
-        // Still call the callback with empty result to reset UI state
-        if (this.onTranscriptionCallback) {
-          this.onTranscriptionCallback({ text: '', confidence: 0 });
-        }
+        console.log('🎤 Buffer too small for transcription');
       }
+      
+      // Clear processing buffer
+      this.processingBuffer = [];
     } catch (error) {
-      console.error('Error processing complete audio file:', error);
-      this.isRecording = false; // Reset state on error
+      console.error('Error processing buffer:', error);
       if (this.onErrorCallback) {
         this.onErrorCallback(error as Error);
       }
+    } finally {
+      this.isProcessingTranscription = false;
     }
   }
 

@@ -11,8 +11,9 @@ export const TranscriptionStrategy = {
 export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeof TranscriptionStrategy];
 let AVATAR_VOICE_LANGUAGE = "en" // "et"
 let TRANSCRIPTION_LANGUAGE = "et"; // "en"
-let avatarName = "Thaddeus_Chair_Sitting_public";
+let AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public";
 let AVATAR_GENDER = "female" // "male"
+export let AVATAR_HUMAN_NAME = "Anu";
 const AVAILABLE_VOICE_IDS = {
   EE_KERT: "adc699478776486997dcf2f7b1534a89",
   EE_ANU: "088b81175b7b4dcabc7179a94467dd06",
@@ -20,25 +21,27 @@ const AVAILABLE_VOICE_IDS = {
   EN_IVY:"cef3bc4e0a84424cafcde6f2cf466c97"
 }
 
-let voiceId = AVAILABLE_VOICE_IDS.EE_ANU;
+let voiceId;
 if(AVATAR_GENDER === "male"){
-  avatarName = "Thaddeus_Chair_Sitting_public";
+  AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public";
   if(AVATAR_VOICE_LANGUAGE == "et") voiceId = AVAILABLE_VOICE_IDS.EE_KERT;
   else voiceId = AVAILABLE_VOICE_IDS.EN_LEMBIT;
 } else {
-  avatarName = "Katya_Chair_Sitting_public";
+  AVATARA_SYSTEM_NAME = "Katya_Chair_Sitting_public";
   if(AVATAR_VOICE_LANGUAGE == "et") voiceId = AVAILABLE_VOICE_IDS.EE_ANU;
   else voiceId = AVAILABLE_VOICE_IDS.EN_IVY;
 }
   
 export const AVATAR_DEFAULTS = {
-  AVATAR_NAME: avatarName, //Wayne_20240711, Graham_Chair_Sitting_public, SilasHR_public, Katya_Chair_Sitting_public,Thaddeus_Chair_Sitting_public
+  AVATAR_HUMAN_NAME: "Anu",
+  AVATAR_NAME: AVATARA_SYSTEM_NAME, //Wayne_20240711, Graham_Chair_Sitting_public, SilasHR_public, Katya_Chair_Sitting_public,Thaddeus_Chair_Sitting_public
   AVATAR_QUALITY: AvatarQuality.High,
   VOICE_RATE: 1.0,
   LANGUAGE: AVATAR_VOICE_LANGUAGE,
   KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
   VOICE_ID:voiceId
 }
+
 /**
  * Audio Transcription Configuration Constants
  */
@@ -56,12 +59,13 @@ export const AUDIO_TRANSCRIPTION_DEFAULTS = {
   DIARIZE: true,
   
   // Transcription Timing
-  CHUNK_DURATION: 30000, // Process chunks every 30 seconds (max)
-  MIN_CHUNK_SIZE: 5000, // Minimum 5KB of audio data
+  CHUNK_DURATION: 1000, // 1 second chunks for faster processing
+  MIN_CHUNK_SIZE: 8000, // Reduced minimum size for faster transcription
+  MAX_BATCH_DURATION: 20000, // 20 seconds max before forced processing
   
   // Silence Detection
   SILENCE_THRESHOLD: 0.01, // Audio level threshold for silence
-  SILENCE_DURATION: 2000, // 1 second of silence triggers transcription
+  SILENCE_DURATION: 800, // 800ms silence detection for batch processing
   
   // Audio Analysis
   FFT_SIZE: 256,
@@ -70,14 +74,57 @@ export const AUDIO_TRANSCRIPTION_DEFAULTS = {
   // Recording Management
   MEDIA_RECORDER_TIMESLICE: 1000, // Request data every 1 second
   RESTART_DELAY: 500, // Delay between stop/start to prevent audio loss
-  TRANSCRIPTION_TRIGGER_DELAY: 100, // Delay before triggering transcription
+  TRANSCRIPTION_TRIGGER_DELAY: 200, // Faster transcription trigger
   
   // Audio Format Preferences (in order of preference)
   PREFERRED_MIME_TYPES: [
-    'audio/wav',
-    'audio/mp4',
+    'audio/webm;codecs=opus',
     'audio/webm',
-    'audio/webm;codecs=opus'
+    'audio/wav',
+    'audio/mp4'
+  ]
+} as const;
+
+/**
+ * Avatar Continuous Listening Configuration Constants
+ * Separate from transcription to optimize avatar response times
+ */
+export const AVATAR_AUDIO_CONFIG = {
+  // API Configuration
+  LANGUAGE: AVATAR_VOICE_LANGUAGE,
+  MODEL: 'scribe_v1',
+  
+  // Audio Settings
+  SAMPLE_RATE: 16000,
+  CHANNEL_COUNT: 1,
+  ECHO_CANCELLATION: true,
+  NOISE_SUPPRESSION: true,
+  AUTO_GAIN_CONTROL: true,
+  DIARIZE: false, // Don't need speaker separation for avatar listening
+  
+  // Transcription Timing (optimized for fast avatar response)
+  CHUNK_DURATION: 15000, // Process chunks every 15 seconds (faster than transcription)
+  MIN_CHUNK_SIZE: 2000, // Minimum 2KB of audio data (smaller for faster processing)
+  
+  // Silence Detection (optimized for conversational response)
+  SILENCE_THRESHOLD: 0.01, // Audio level threshold for silence
+  SILENCE_DURATION: 800, // 0.8 seconds of silence triggers processing (faster response)
+  
+  // Audio Analysis
+  FFT_SIZE: 256,
+  AUDIO_CHECK_INTERVAL: 100, // Check audio levels every 100ms
+  
+  // Recording Management (optimized for avatar responsiveness)
+  MEDIA_RECORDER_TIMESLICE: 500, // Request data every 0.5 seconds (faster)
+  RESTART_DELAY: 200, // Delay between stop/start to prevent audio loss (reduced)
+  TRANSCRIPTION_TRIGGER_DELAY: 50, // Delay before triggering transcription (reduced)
+  
+  // Audio Format Preferences (in order of preference)
+  PREFERRED_MIME_TYPES: [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/wav',
+    'audio/mp4'
   ]
 } as const;
 
@@ -117,8 +164,9 @@ export const API_ENDPOINTS = {
 export const AUDIO_FILE_EXTENSIONS = {
   'audio/wav': 'audio.wav',
   'audio/mp4': 'audio.mp4',
+  'audio/mp4;codecs=opus': 'audio.webm',
   'audio/webm': 'audio.webm',
+  'audio/webm;codecs=opus': 'audio.webm',
   'audio/ogg': 'audio.ogg'
 } as const;
-
-export const KNOWLEDGEBASE_BASE = `#Instructions: Your name is Anu, you are a panelist taking part of panel discussion on the topic of digital transformation and AI. You are the newest member of Portata - We help enterprises, institutions, and nations turn intelligence into infrastructure with PAGIS, our AGI execution OS.  The panel is part of the Telia Digital Hub conference. Panel moderator ${SPEAKER_NAMES.MODE_NAME} will ask you questions, adress him when he asks you a questions (all prompts are from him). When prompted, form a short opinion based on the transcript of the ongoing panel discussion (if available) and your own knowledge. Keep the answer strictly on topic and around the conference theme (if available). Always reply in Estonian language, regardless of prompt language. #Conference theme: Digital Transformation. # Panel Discussion Transcript:"`
+export const KNOWLEDGEBASE_BASE = `#Instructions: Your name is ${AVATAR_HUMAN_NAME}, you are a panelist taking part of panel discussion on the topic of digital transformation and AI. You are the newest member of Portata company.  The panel is part of the Telia Digital Hub conference. Panel moderator ${SPEAKER_NAMES.MODE_NAME} will ask you questions, adress him when he asks you by your name ${AVATAR_HUMAN_NAME}. When prompted, form a short opinion based on the transcript of the ongoing panel discussion (if available) and your own knowledge. Keep the answer strictly on topic and around the conference theme (if available). Always reply in ${AVATAR_VOICE_LANGUAGE} language, regardless of prompt language. #Conference theme: Digital Transformation. # Panel Discussion Transcript:"`
