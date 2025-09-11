@@ -385,7 +385,7 @@ export class AudioTranscriptionService {
   }
 
   /**
-   * Start the 20-second max batch timer
+   * Start the 10-second max batch timer
    */
   private startMaxBatchTimer(): void {
     if (this.maxBatchTimer) {
@@ -393,7 +393,7 @@ export class AudioTranscriptionService {
     }
     
     this.maxBatchTimer = setTimeout(() => {
-      console.log('🎤 20-second max duration reached, switching buffer');
+      console.log('🎤 10-second max duration reached, switching buffer');
       if (this.isRecording && this.currentBuffer.length > 0) {
         this.switchBuffer();
       }
