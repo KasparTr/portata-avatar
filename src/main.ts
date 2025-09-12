@@ -23,7 +23,6 @@ const userInput = document.getElementById("userInput") as HTMLInputElement;
 const startRecordingButton = document.getElementById("startRecordingButton") as HTMLButtonElement;
 const stopRecordingButton = document.getElementById("stopRecordingButton") as HTMLButtonElement;
 const transcriptionOutput = document.getElementById("transcriptionOutput") as HTMLTextAreaElement;
-const unifiedRecordButton = document.getElementById("unifiedRecordButton") as HTMLButtonElement;
 const saveTranscriptionButton = document.getElementById("saveTranscriptionButton") as HTMLButtonElement;
 const leverHandle = document.getElementById("leverHandle") as HTMLElement;
 const leverTrack = document.getElementById("leverTrack") as HTMLElement;
@@ -54,9 +53,7 @@ let isAvatarSpeaking: boolean = false;
 let knowledgeBaseService: KnowledgeBaseService | null = null;
 let continuousListeningService: ContinuousListeningService | null = null;
 let isContinuousListeningActive: boolean = false;
-let pendingAvatarResponse: string | null = null;
 let sharedAudioStream: MediaStream | null = null;
-let isAvatarStreamReady: boolean = false; // Track if avatar stream is ready
 
 // Audio sensitivity monitoring
 let audioContext: AudioContext | null = null;
@@ -94,19 +91,9 @@ async function initializeAvatarSession() {
     avatar.on(StreamingEvents.AVATAR_START_TALKING, handleAvatarStartTalking);
     avatar.on(StreamingEvents.AVATAR_STOP_TALKING, handleAvatarStopTalking);
     
-    sessionData = await avatar.newSession(createAvatarConfig());
+    sessionData = await avatar.createStartAvatar(createAvatarConfig());
     console.log('🎯 Avatar session created:', !!sessionData);
     console.log('🎯 Avatar instance state:', avatar ? 'exists' : 'null');
-    
-    // Try to start session, but ignore 400 error if already started
-    try {
-      console.log('🎯 Attempting to start avatar session...');
-      const startResult = await avatar.startSession();
-      console.log('🎯 Avatar session started successfully:', startResult);
-    } catch (error) {
-      console.log('🎯 StartSession failed (likely already started):');
-      // This is expected if session is already started by createStartAvatar
-    }
     
     // Enable start button, keep stop button disabled until avatar speaks
     endButton.disabled = false;
@@ -116,12 +103,16 @@ async function initializeAvatarSession() {
     console.log('🎤 Creating shared audio stream...');
     await getSharedAudioStream();
 
+    // Initialize transcription service before starting continuous transcription
+    console.log('🎤 Initializing transcription service...');
+    await initializeTranscriptionService();
+
     // Start continuous transcription when session starts (this will handle everything)
     console.log('🎤 Attempting to start continuous transcription...');
     await startContinuousTranscription();
     
-    // Initialize continuous listening but don't start it yet (transcription takes priority)
-    await initializeContinuousListening();
+    // DISABLED: Initialize continuous listening but don't start it yet (transcription takes priority)
+    // await initializeContinuousListening();
     
     // Initialize audio sensitivity monitoring
     initializeAudioSensitivityMonitor();
@@ -164,26 +155,21 @@ function createAvatarConfig(){
   return config
 }
 
+// Update transcription status display
+function updateTranscriptionStatus(status: string) {
+  const statusElement = document.getElementById('transcriptionStatus');
+  if (statusElement) {
+    statusElement.textContent = status;
+  }
+}
+
 // Handle avatar speaking events
 function handleAvatarStartTalking() {
-  console.log("🎯 Avatar started talking - event fired");
+  console.log('🎯 Avatar started talking');
   isAvatarSpeaking = true;
   
-  // Stop continuous transcription when avatar starts speaking
-  if (isAutoTranscribing) {
-    console.log('🎤 Stopping transcription - avatar started speaking');
-    stopContinuousTranscription();
-  }
-  
-  // Inject pending avatar response into transcription
-  if (pendingAvatarResponse && transcriptionOutput.value) {
-    const avatarTranscription = `[${AVATAR_DEFAULTS.AVATAR_HUMAN_NAME}]: ${pendingAvatarResponse}`;
-    const currentText = transcriptionOutput.value;
-    const separator = currentText ? '\n\n' : '';
-    transcriptionOutput.value = currentText + separator + avatarTranscription;
-    transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
-    pendingAvatarResponse = null; // Clear after injection
-  }
+  // Update UI to show avatar is speaking
+  updateTranscriptionStatus('🎯 Avatar speaking...');
   
   // Enable stop speaking button when avatar starts talking
   stopSpeakingButton.disabled = false;
@@ -191,17 +177,12 @@ function handleAvatarStartTalking() {
   if (repeatButton) repeatButton.disabled = true; // Disable repeat button
 }
 
-function handleAvatarStopTalking() {
-  console.log("🎯 Avatar stopped talking - event fired");
+async function handleAvatarStopTalking() {
+  console.log('🎯 Avatar stopped talking');
   isAvatarSpeaking = false;
   
-  // Restart continuous transcription when avatar stops speaking
-  setTimeout(async () => {
-    if (!isAutoTranscribing) {
-      console.log('🎤 Restarting transcription - avatar stopped speaking');
-      await startContinuousTranscription();
-    }
-  }, 500); // Small delay to ensure avatar has fully stopped
+  // Resume transcription after avatar finishes
+  await resumeTranscriptionAfterAvatar();
   
   // Disable stop speaking button and re-enable other buttons when avatar stops
   stopSpeakingButton.disabled = true;
@@ -281,7 +262,6 @@ function startAudioLevelMonitoring(stream: MediaStream) {
 // Handle when avatar stream is ready
 function handleStreamReady(event: any) {
   console.log('🎯 Avatar stream ready event fired');
-  isAvatarStreamReady = true;
   
   if (event.detail && videoElement) {
     videoElement.srcObject = event.detail;
@@ -294,18 +274,6 @@ function handleStreamReady(event: any) {
       }
       console.log('🎯 Avatar video stream is now playing and ready for speech');
       
-      // If there's a pending avatar response, speak it now
-      if (pendingAvatarResponse && avatar) {
-        console.log('🎯 Speaking pending response now that stream is ready:', pendingAvatarResponse);
-        avatar.speak({ text: pendingAvatarResponse, task_type: TaskType.TALK })
-          .then(() => {
-            console.log('🎯 Pending response spoken successfully');
-            pendingAvatarResponse = null;
-          })
-          .catch((error) => {
-            console.error('🎯 Error speaking pending response:', error);
-          });
-      }
     };
   } else {
     console.log('🎯 No avatar stream available in event');
@@ -445,17 +413,6 @@ function getSpeakerPrefix(): string {
   return speaker ? speaker.prefix : '[Speaker]: ';
 }
 
-// Get speaker name by ID for display purposes
-function getSpeakerName(speakerId: string): string {
-  if (speakerId === 'custom') {
-    const customInput = document.getElementById('customSpeaker') as HTMLInputElement;
-    return customInput?.value.trim() || 'Speaker';
-  }
-  
-  const speaker = SPEAKER_OPTIONS.find(s => s.id === speakerId);
-  return speaker ? speaker.label : 'Speaker';
-}
-
 // Handle transcription start
 async function handleStartTranscription() {
   if (!transcriptionService) {
@@ -523,91 +480,6 @@ async function handleStopTranscription() {
   startRecordingButton.textContent = '🎤 Start Transcription';
 }
 
-// Remove lever toggle - unified button is now avatar-only
-// Lever UI elements can be hidden or removed from HTML
-
-// Handle unified recording - now avatar-only
-async function handleUnifiedRecord() {
-  if (!isRecording) {
-    // Start avatar voice input recording
-    isRecording = true;
-    unifiedRecordButton.classList.add('recording');
-    unifiedRecordButton.textContent = '⏹️ Send';
-    
-    // Start voice input for avatar
-    if (!voiceInputTranscriptionService) {
-      await initializeVoiceInputTranscriptionService();
-      if (!voiceInputTranscriptionService) {
-        isRecording = false;
-        unifiedRecordButton.classList.remove('recording');
-        unifiedRecordButton.textContent = '🎤 Talk to Avatar';
-        return;
-      }
-    }
-    
-    try {
-      // Force reset state to prevent "Recording already in progress" error
-      voiceInputTranscriptionService.forceResetState();
-      
-      await voiceInputTranscriptionService.startRecording(
-        (result: TranscriptionResult) => {
-          console.log('Voice input result:', result.text);
-          userInput.value = result.text;
-          
-          if (isWaitingForVoiceInput) {
-            isWaitingForVoiceInput = false;
-            console.log("Voice input completed: ", userInput.value);
-            
-            // Reset button states
-            isRecording = false;
-            unifiedRecordButton.classList.remove('recording');
-            unifiedRecordButton.textContent = '🎤 Talk to Avatar';
-            
-            // Trigger avatar to speak if there's text
-            if (userInput.value.trim()) {
-              handleSpeak();
-            } else {
-              console.log('No voice input detected or audio too short');
-            }
-          }
-        },
-        (error: Error) => {
-          console.error('Voice input transcription error:', error);
-          isWaitingForVoiceInput = false;
-          isRecording = false;
-          unifiedRecordButton.classList.remove('recording');
-          unifiedRecordButton.textContent = '🎤 Talk to Avatar';
-        }
-      );
-    } catch (error) {
-      console.error('Failed to start voice recording:', error);
-      isRecording = false;
-      unifiedRecordButton.classList.remove('recording');
-      unifiedRecordButton.textContent = '🎤 Record';
-    }
-  } else {
-    // Stop avatar voice input recording
-    console.log('Stopping avatar voice input recording');
-    
-    isWaitingForVoiceInput = true;
-    if (voiceInputTranscriptionService) {
-      await voiceInputTranscriptionService.stopRecording();
-    }
-    unifiedRecordButton.textContent = '🎤 Processing...';
-    
-    // Add timeout to reset button state if transcription takes too long or fails
-    setTimeout(() => {
-      if (isWaitingForVoiceInput) {
-        console.log('Transcription timeout - resetting button state');
-        isWaitingForVoiceInput = false;
-        isRecording = false;
-        unifiedRecordButton.classList.remove('recording');
-        unifiedRecordButton.textContent = '🎤 Talk to Avatar';
-      }
-    }, 10000); // 10 second timeout
-  }
-}
-
 // Initialize knowledge base service
 async function initializeKnowledgeBaseService(): Promise<KnowledgeBaseService | null> {
   const heygenApiKey = import.meta.env.VITE_HEYGEN_API_KEY;
@@ -672,169 +544,103 @@ async function saveTranscription() {
   }
 }
 
-// Drag functionality
-function initializeDragFunctionality() {
-  let startX = 0;
-  let startY = 0;
-  let initialX = 0;
-  let initialY = 0;
-
-  function handleDragStart(e: MouseEvent | TouchEvent) {
-    if (e.target === leverTrack || e.target === leverHandle || 
-        e.target === avatarLabel || e.target === transcriptionLabel ||
-        e.target === unifiedRecordButton) {
-      return; // Don't start drag on interactive elements
-    }
-
-    isDragging = true;
-    leverControl.classList.add('dragging');
-
-    const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX;
-    const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY;
-
-    const rect = leverControl.getBoundingClientRect();
-    initialX = rect.left;
-    initialY = rect.top;
-    startX = clientX - initialX;
-    startY = clientY - initialY;
-
-    dragOffset.x = startX;
-    dragOffset.y = startY;
-
-    document.addEventListener('mousemove', handleDragMove);
-    document.addEventListener('mouseup', handleDragEnd);
-    document.addEventListener('touchmove', handleDragMove, { passive: false });
-    document.addEventListener('touchend', handleDragEnd);
-
-    e.preventDefault();
-  }
-
-  function handleDragMove(e: MouseEvent | TouchEvent) {
-    if (!isDragging) return;
-
-    e.preventDefault();
-
-    const clientX = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX;
-    const clientY = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY;
-
-    let newX = clientX - dragOffset.x;
-    let newY = clientY - dragOffset.y;
-
-    // Keep within screen bounds
-    const rect = leverControl.getBoundingClientRect();
-    const maxX = window.innerWidth - rect.width;
-    const maxY = window.innerHeight - rect.height;
-
-    newX = Math.max(0, Math.min(newX, maxX));
-    newY = Math.max(0, Math.min(newY, maxY));
-
-    leverControl.style.left = `${newX}px`;
-    leverControl.style.top = `${newY}px`;
-    leverControl.style.right = 'auto';
-    leverControl.style.transform = 'none';
-  }
-
-  function handleDragEnd() {
-    if (!isDragging) return;
-
-    isDragging = false;
-    leverControl.classList.remove('dragging');
-
-    document.removeEventListener('mousemove', handleDragMove);
-    document.removeEventListener('mouseup', handleDragEnd);
-    document.removeEventListener('touchmove', handleDragMove);
-    document.removeEventListener('touchend', handleDragEnd);
-  }
-
-  // Add event listeners for drag start
-  leverControl.addEventListener('mousedown', handleDragStart);
-  leverControl.addEventListener('touchstart', handleDragStart, { passive: false });
-  dragHandle.addEventListener('mousedown', handleDragStart);
-  dragHandle.addEventListener('touchstart', handleDragStart, { passive: false });
-}
-
 // Auto-start continuous transcription when avatar session begins
 async function startContinuousTranscription() {
-  console.log('🎤 startContinuousTranscription called');
-  console.log('🎤 transcriptionService exists:', !!transcriptionService);
-  console.log('🎤 isAutoTranscribing:', isAutoTranscribing);
-  console.log('🎤 currentStrategy:', currentStrategy);
-  
   if (!transcriptionService) {
-    console.log('🎤 No transcription service, initializing...');
-    await initializeTranscriptionService();
-    if (!transcriptionService) {
-      console.error('❌ Failed to initialize transcription service for continuous mode');
-      return;
-    }
+    console.error('Transcription service not initialized');
+    return;
   }
 
-  // Only start if not already auto-transcribing
-  if (!isAutoTranscribing) {
-    try {
-      console.log('🎤 Starting continuous transcription with strategy:', currentStrategy);
+  try {
+    console.log('🎤 Starting continuous transcription...');
+    
+    // Get current speaker for transcription attribution
+    const getCurrentSpeaker = () => {
+      const speakerSelect = document.getElementById('speakerSelect') as HTMLSelectElement;
+      return speakerSelect ? speakerSelect.value : 'User';
+    };
+    
+    // Handle name detection - this triggers avatar interaction
+    const handleNameDetection = async (result: TranscriptionResult) => {
+      console.log('🎯 Avatar name detected, starting interaction flow');
       
-      // Set flag before starting to ensure callbacks work
-      isAutoTranscribing = true;
+      // Pause transcription during avatar interaction
+      //await pauseTranscriptionForAvatar();
       
-      await transcriptionService.startRecording(
-        (result: TranscriptionResult) => {
-          // Only process if we're still in auto-transcription mode and not during avatar speech
-          if (isAutoTranscribing && !isAvatarSpeaking) {
-            console.log('🎤 Transcription result received:', result.text);
-            let transcriptionText = result.text;
-            
-            // Skip empty results
-            if (!transcriptionText || transcriptionText.trim() === '') {
-              console.log('🎤 Skipping empty transcription result');
-              return;
-            }
-            
-            // Add speaker prefix - use speaker from result if available, otherwise use current selection
-            if (currentStrategy === TranscriptionStrategy.ON_DEMAND) {
-              if (result.speaker) {
-                // Use the speaker that was captured when this batch started processing
-                const speakerName = getSpeakerName(result.speaker);
-                transcriptionText = `[${speakerName}]: ${transcriptionText}`;
-              } else {
-                transcriptionText = getSpeakerPrefix() + transcriptionText;
-              }
-            } else {
-              // For real-time mode, add simple prefix
-              transcriptionText = `[User]: ${transcriptionText}`;
-            }
-            
-            console.log('🎤 Adding to Live Transcription:', transcriptionText);
-            
-            // Store in entire transcript variable
-            const separator = entireTranscript ? '\n\n' : '';
-            entireTranscript = entireTranscript ? `${entireTranscript}${separator}${transcriptionText}` : transcriptionText;
-            
-            // Append new transcription to the output with double line break separation
-            const currentText = transcriptionOutput.value;
-            const displaySeparator = currentText ? '\n\n' : '';
-            const newText = currentText ? `${currentText}${displaySeparator}${transcriptionText}` : transcriptionText;
-            transcriptionOutput.value = newText;
-            
-            // Auto-scroll to bottom
-            transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
-          }
-        },
-        (error: Error) => {
-          console.error('Continuous transcription error:', error);
-          // Auto-restart on error if we should still be transcribing
-          if (isAutoTranscribing) {
-            setTimeout(() => startContinuousTranscription(), 2000);
-          }
-        },
-        () => currentSpeaker // Pass function to get current speaker selection
-      );
+      // Pass the full transcription to avatar as chat
+      if (avatar && sessionData) {
+        try {
+          console.log('🎯 Sending transcription to avatar:', result.text);
+          console.log('🎯 Avatar session state:', {
+            sessionId: sessionData.session_id,
+            avatarReady: !!avatar,
+            sessionDataExists: !!sessionData
+          });
+          // switch to voice chat. in this mode, we will record your voice and keep chatting with avatar in real time.
+          await avatar.startVoiceChat();
+                
+          // const avatarResponse = await avatar.speak({
+          //   text: result.text,
+          //   task_type: TaskType.TALK
+          // });
+          
+          // console.log('🎯 avatarResponse:', avatarResponse);
+          
+        } catch (error) {
+          console.error('🎯 Error making avatar speak:', error);
+          console.error('🎯 Error details:', JSON.stringify(error, null, 2));
+          // Resume transcription even if avatar fails
+          //await resumeTranscriptionAfterAvatar();
+        }
+      } else {
+        console.error('🎯 Cannot make avatar speak - missing avatar or session data:', {
+          avatar: !!avatar,
+          sessionData: !!sessionData
+        });
+        //await resumeTranscriptionAfterAvatar();
+      }
+    };
+    
+    // Handle regular transcription results
+    const handleTranscription = (result: TranscriptionResult) => {
+      if (!result.text || result.text.trim() === '') return;
       
-      console.log('🎤 Continuous transcription started successfully');
-    } catch (error) {
-      console.error('Failed to start continuous transcription:', error);
-      isAutoTranscribing = false; // Reset flag on error
+      // Add speaker prefix and display transcription
+      const speaker = result.speaker || getCurrentSpeaker();
+      const transcriptionText = `[${speaker}]: ${result.text}`;
+      
+      const currentText = transcriptionOutput.value;
+      const separator = currentText ? '\n\n' : '';
+      transcriptionOutput.value = currentText + separator + transcriptionText;
+      transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
+      
+      console.log('📝 Transcription added:', transcriptionText);
+    };
+    
+    await transcriptionService.startRecording(
+      handleTranscription,
+      (error) => {
+        console.error('Transcription error:', error);
+        updateTranscriptionStatus('❌ Transcription error');
+      },
+      getCurrentSpeaker,
+      handleNameDetection
+    );
+    
+    isAutoTranscribing = true;
+    updateTranscriptionStatus('🎤 Listening...');
+    
+    // Update pause/resume button
+    const pauseResumeBtn = document.getElementById('pauseResumeTranscription') as HTMLButtonElement;
+    if (pauseResumeBtn) {
+      pauseResumeBtn.textContent = '⏸️ Pause Transcription';
+      pauseResumeBtn.disabled = false;
     }
+    
+    console.log('✅ Continuous transcription started successfully');
+  } catch (error) {
+    console.error('Failed to start continuous transcription:', error);
+    updateTranscriptionStatus('❌ Failed to start transcription');
   }
 }
 
@@ -844,34 +650,6 @@ async function stopContinuousTranscription() {
     console.log('🎤 Stopping continuous transcription');
     await transcriptionService.stopRecording();
     isAutoTranscribing = false;
-  }
-}
-
-// Initialize voice input transcription service
-async function initializeVoiceInputTranscriptionService() {
-  const elevenlabsApiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-  
-  if (!elevenlabsApiKey) {
-    console.error('ElevenLabs API key not found in environment variables');
-    return;
-  }
-
-  if (!AudioTranscriptionService.isSupported()) {
-    console.error('Audio transcription not supported in this browser');
-    return;
-  }
-
-  voiceInputTranscriptionService = new AudioTranscriptionService({
-    apiKey: elevenlabsApiKey,
-    strategy: TranscriptionStrategy.ON_DEMAND, // Always use on-demand for voice input
-    minChunkSize: 1000 // Lower threshold for voice input (1KB instead of 15KB)
-  });
-
-  try {
-    await voiceInputTranscriptionService.initialize();
-    console.log('Voice input transcription service initialized successfully');
-  } catch (error) {
-    console.error('Failed to initialize voice input transcription service:', error);
   }
 }
 
@@ -969,46 +747,6 @@ async function getSharedAudioStream(): Promise<MediaStream> {
   return sharedAudioStream;
 }
 
-// Initialize continuous listening service
-async function initializeContinuousListening() {
-  const elevenlabsApiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-  
-  if (!elevenlabsApiKey) {
-    console.error('ElevenLabs API key not found for continuous listening');
-    return;
-  }
-
-  if (!ContinuousListeningService.isSupported()) {
-    console.error('Continuous listening not supported in this browser');
-    return;
-  }
-
-  continuousListeningService = new ContinuousListeningService({
-    apiKey: elevenlabsApiKey,
-    language: AVATAR_DEFAULTS.LANGUAGE, // Use avatar's language instead of transcription language
-    avatarName: AVATAR_DEFAULTS.AVATAR_HUMAN_NAME,
-    enableInterruptDetection: true,
-    onNameDetected: handleAvatarNameDetected,
-    onUserVoiceDetected: handleUserInterrupt,
-    onError: (error: Error) => {
-      console.error('Continuous listening error:', error);
-    }
-  });
-
-  try {
-    // Use shared audio stream to avoid microphone conflicts
-    const audioStream = await getSharedAudioStream();
-    await continuousListeningService.initializeWithStream(audioStream);
-    // Start listening for avatar name detection
-    await continuousListeningService.startListening();
-    isContinuousListeningActive = true;
-    console.log('🎧 Continuous listening initialized with shared stream and started - listening for avatar name');
-    updateContinuousListeningUI();
-  } catch (error) {
-    console.error('Failed to initialize continuous listening:', error);
-  }
-}
-
 // Stop continuous listening
 async function stopContinuousListening() {
   if (continuousListeningService) {
@@ -1016,148 +754,6 @@ async function stopContinuousListening() {
     continuousListeningService.cleanup();
     continuousListeningService = null;
     isContinuousListeningActive = false;
-  }
-}
-
-// Handle avatar name detection from continuous listening
-async function handleAvatarNameDetected(transcription: string) {
-  console.log('🎯 Avatar name detected:', transcription);
-  
-  // Stop continuous transcription temporarily to avoid transcribing avatar response
-  let wasAutoTranscribing = false;
-  if (transcriptionService && isAutoTranscribing) {
-    console.log('🎯 Temporarily stopping continuous transcription due to Anu activation');
-    wasAutoTranscribing = true;
-    await stopContinuousTranscription();
-    
-    // Add user input to transcription output
-    const userTranscription = `[User]: ${transcription}`;
-    const currentText = transcriptionOutput.value;
-    const separator = currentText ? '\n\n' : '';
-    transcriptionOutput.value = currentText + separator + userTranscription;
-    transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
-  }
-  
-  // Update UI to show detection
-  if (continuousListeningStatus) {
-    continuousListeningStatus.textContent = `🎯 Name detected: "${transcription}"`;
-  }
-  
-  // Store the transcription for later injection into transcription output
-  pendingAvatarResponse = transcription;
-  
-  // Trigger avatar to respond
-  if (avatar) {
-    try {
-      console.log('🎯 Avatar exists, attempting to make it speak...');
-      console.log('🎯 Avatar session data:', !!sessionData);
-      console.log('🎯 Avatar session ID:', sessionData?.session_id);
-      console.log('🎯 Avatar stream ready:', isAvatarStreamReady);
-      
-      if (!isAvatarStreamReady) {
-        console.log('🎯 ⚠️ Avatar stream not ready yet - waiting for STREAM_READY event');
-        // Store the transcription to speak once stream is ready
-        pendingAvatarResponse = transcription;
-        return;
-      }
-      
-      console.log('🎯 Calling avatar.speak() with text:', transcription);
-      console.log('🎯 Avatar config being used:', createAvatarConfig());
-      
-      
-      // Try with TALK task type
-      console.log('🎯 Testing with TALK task type...');
-      try {
-        const talkResult = await avatar.speak({ 
-          text: transcription, 
-          task_type: TaskType.TALK 
-        });
-        console.log('🎯 TALK test result:', talkResult);
-        console.log('🎯 TALK test result type:', typeof talkResult);
-      } catch (error) {
-        console.error('🎯 Error with TALK:', error);
-      }
-
-      // Check if avatar is actually ready to speak
-      console.log('🎯 Checking avatar state after speak call...');
-      
-      // Restart transcription after avatar finishes speaking
-      if (wasAutoTranscribing) {
-        setTimeout(() => {
-          console.log('🎤 Restarting continuous transcription after Anu response');
-          startContinuousTranscription();
-        }, 1000);
-      }
-    } catch (error) {
-      console.log('🎯 Error making avatar speak:', error);
-      console.log('🎯 Error details:', JSON.stringify(error, null, 2));
-      
-      // Still restart transcription even if speak failed
-      if (wasAutoTranscribing) {
-        setTimeout(() => {
-          console.log('🎤 Restarting continuous transcription after Anu response (error case)');
-          startContinuousTranscription();
-        }, 1000);
-      }
-    }
-  } else {
-    console.log('🎯 No avatar instance available - avatar is null');
-    console.log('🎯 Session data exists:', !!sessionData);
-  }
-}
-
-// Handle user voice interrupt detection
-async function handleUserInterrupt(transcription: string) {
-  console.log('🛑 User interrupt detected:', transcription);
-  
-  // Update UI to show interrupt
-  if (continuousListeningStatus) {
-    continuousListeningStatus.textContent = `🛑 Interrupt: "${transcription}"`;
-  }
-  
-  // Always interrupt the avatar when user voice is detected
-  if (avatar) {
-    try {
-      console.log('🛑 Interrupting avatar speech due to user voice');
-      await avatar.interrupt();
-    } catch (error) {
-      console.error('Error interrupting avatar:', error);
-    }
-  }
-}
-
-// Update UI to show continuous listening status
-function updateContinuousListeningUI() {
-  // We'll add a status indicator in the UI
-  let statusElement = document.getElementById('continuousListeningStatus');
-  if (!statusElement) {
-    // Create status element if it doesn't exist
-    statusElement = document.createElement('div');
-    statusElement.id = 'continuousListeningStatus';
-    statusElement.style.cssText = `
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      padding: 8px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      z-index: 1000;
-      transition: all 0.3s ease;
-    `;
-    document.body.appendChild(statusElement);
-  }
-  
-  if (isContinuousListeningActive) {
-    statusElement.textContent = '🎧 Listening for "Anu"...';
-    statusElement.style.backgroundColor = '#28a745';
-    statusElement.style.color = 'white';
-    statusElement.style.boxShadow = '0 2px 8px rgba(40, 167, 69, 0.3)';
-  } else {
-    statusElement.textContent = '🔇 Not listening';
-    statusElement.style.backgroundColor = '#6c757d';
-    statusElement.style.color = 'white';
-    statusElement.style.boxShadow = '0 2px 8px rgba(108, 117, 125, 0.3)';
   }
 }
 
@@ -1202,15 +798,12 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Lever controls removed - unified button is now avatar-only
   // TODO: Hide or remove lever UI elements from HTML
-  
-  // Unified record button event listener
-  unifiedRecordButton.addEventListener("click", handleUnifiedRecord);
+
   
   // Save transcription button event listener
   saveTranscriptionButton.addEventListener("click", saveTranscription);
   
   // Initialize drag functionality
-  initializeDragFunctionality();
   
   // Initialize UI state
   handleStrategyChange();
@@ -1225,3 +818,96 @@ speakButton.addEventListener("click", handleSpeak);
 repeatButton.addEventListener("click", handleRepeat);
 startRecordingButton.addEventListener("click", handleStartTranscription);
 stopRecordingButton.addEventListener("click", handleStopTranscription);
+
+// Helper functions for avatar interaction flow
+async function pauseTranscriptionForAvatar(): Promise<void> {
+  console.log('🎯 Pausing transcription for avatar interaction');
+  if (transcriptionService && isAutoTranscribing) {
+    await transcriptionService.stopRecording();
+    isAutoTranscribing = false;
+    updateTranscriptionStatus('🎯 Avatar responding...');
+  }
+}
+
+async function resumeTranscriptionAfterAvatar(): Promise<void> {
+  console.log('🎯 Resuming transcription after avatar interaction');
+  if (transcriptionService && !isAutoTranscribing) {
+    // Restart transcription with interruption detection
+    await startTranscriptionWithInterruptionDetection();
+  }
+}
+
+async function startTranscriptionWithInterruptionDetection(): Promise<void> {
+  if (!transcriptionService) return;
+  
+  try {
+    // Handle interruption detection during avatar speech
+    const handleInterruption = async (result: TranscriptionResult) => {
+      if (isAvatarSpeaking && result.text && result.text.trim() !== '') {
+        console.log('🛑 User interruption detected during avatar speech:', result.text);
+        
+        // Stop avatar immediately
+        if (avatar) {
+          try {
+            await avatar.interrupt();
+            console.log('🛑 Avatar interrupted successfully');
+          } catch (error) {
+            console.error('🛑 Error interrupting avatar:', error);
+          }
+        }
+        
+        // Add interruption to transcription
+        const transcriptionText = `[User - Interruption]: ${result.text}`;
+        const currentText = transcriptionOutput.value;
+        const separator = currentText ? '\n\n' : '';
+        transcriptionOutput.value = currentText + separator + transcriptionText;
+        transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
+        
+        // Resume normal transcription
+        await resumeNormalTranscription();
+      }
+    };
+    
+    // Handle regular transcription during interruption detection mode
+    const handleTranscription = (result: TranscriptionResult) => {
+      if (!result.text || result.text.trim() === '') return;
+      
+      // During avatar speech, only handle interruptions
+      if (isAvatarSpeaking) {
+        handleInterruption(result);
+        return;
+      }
+      
+      // Normal transcription handling
+      const speaker = result.speaker || 'User';
+      const transcriptionText = `[${speaker}]: ${result.text}`;
+      
+      const currentText = transcriptionOutput.value;
+      const separator = currentText ? '\n\n' : '';
+      transcriptionOutput.value = currentText + separator + transcriptionText;
+      transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
+    };
+    
+    await transcriptionService.startRecording(
+      handleTranscription,
+      (error) => {
+        console.error('Interruption detection error:', error);
+      },
+      () => 'User'
+    );
+    
+    isAutoTranscribing = true;
+    updateTranscriptionStatus('🎤 Listening for interruptions...');
+    
+  } catch (error) {
+    console.error('Failed to start interruption detection:', error);
+  }
+}
+
+async function resumeNormalTranscription(): Promise<void> {
+  console.log('🎤 Resuming normal transcription mode');
+  if (transcriptionService) {
+    await transcriptionService.stopRecording();
+    await startContinuousTranscription();
+  }
+}

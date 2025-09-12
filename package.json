@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.12.0",
-    "@heygen/streaming-avatar": "^2.0.16",
+    "@heygen/streaming-avatar": "^2.1.0",
     "elevenlabs-js": "^1.2.6",
     "livekit-client": "^2.15.5"
   }

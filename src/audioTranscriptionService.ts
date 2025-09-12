@@ -6,6 +6,7 @@ export interface TranscriptionResult {
   confidence?: number;
   timestamp?: number;
   speaker?: string;
+  containsAvatarName?: boolean;
 }
 
 export interface AudioTranscriptionConfig {
@@ -38,6 +39,7 @@ export class AudioTranscriptionService {
   private isProcessingTranscription: boolean = false;
   private currentSpeaker: string = '';
   private getSpeakerCallback?: () => string;
+  private nameDetectionCallback?: (result: TranscriptionResult) => void;
 
   constructor(config: AudioTranscriptionConfig) {
     this.config = {
@@ -169,7 +171,8 @@ export class AudioTranscriptionService {
   async startRecording(
     onTranscription: (result: TranscriptionResult) => void,
     onError?: (error: Error) => void,
-    getSpeaker?: () => string
+    getSpeaker?: () => string,
+    nameDetectionCallback?: (result: TranscriptionResult) => void
   ): Promise<void> {
     if (!this.audioStream) {
       throw new Error('Audio service not initialized. Call initialize() first.');
@@ -192,6 +195,7 @@ export class AudioTranscriptionService {
     this.onTranscriptionCallback = onTranscription;
     this.onErrorCallback = onError;
     this.getSpeakerCallback = getSpeaker;
+    this.nameDetectionCallback = nameDetectionCallback;
     this.currentBuffer = [];
     this.isRecording = true;
 
@@ -342,15 +346,56 @@ export class AudioTranscriptionService {
   }
 
   /**
-   * Start silence detection and 20-second timer for buffer switching
-   * DISABLED: Silence detection causes too many API requests
+   * Start silence detection to trigger transcription
    */
   private startSilenceDetection(): void {
-    // SILENCE DETECTION DISABLED - causes excessive API requests
-    // Only rely on max batch timer now
-    console.log('🎤 Silence detection disabled, using only max batch timer');
+    console.log('🎤 Starting silence detection for sentence-based processing');
     
-    // Start 20-second max timer
+    const checkAudioLevel = () => {
+      if (!this.audioAnalyzer || !this.isRecording) return;
+      
+      const dataArray = new Uint8Array(this.audioAnalyzer.frequencyBinCount);
+      this.audioAnalyzer.getByteFrequencyData(dataArray);
+      
+      // Calculate average volume
+      const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+      const normalizedLevel = average / 255;
+      
+      const now = Date.now();
+      
+      // Check if sound is above threshold
+      if (normalizedLevel > (this.config.silenceThreshold || 0.05)) {
+        this.lastSoundTime = now;
+        // Clear any existing silence timer
+        if (this.silenceTimer) {
+          clearTimeout(this.silenceTimer);
+          this.silenceTimer = null;
+        }
+      } else {
+        // Check for silence duration
+        const silenceDuration = now - this.lastSoundTime;
+        if (silenceDuration > (this.config.silenceDuration || 2000) && !this.silenceTimer && this.currentBuffer.length > 0) {
+          this.silenceTimer = setTimeout(() => {
+            if (this.isRecording && this.currentBuffer.length > 0) {
+              console.log('🎤 Silence detected, processing audio batch');
+              this.switchBuffer();
+            }
+            this.silenceTimer = null;
+          }, 500);
+        }
+      }
+      
+      // Continue monitoring
+      if (this.isRecording) {
+        requestAnimationFrame(checkAudioLevel);
+      }
+    };
+    
+    // Start monitoring
+    this.lastSoundTime = Date.now();
+    checkAudioLevel();
+    
+    // Also start max batch timer as backup
     this.startMaxBatchTimer();
   }
   private startMaxBatchTimer(): void {
@@ -455,11 +500,24 @@ export class AudioTranscriptionService {
         const transcription = await this.transcribeAudio(audioBlob);
         
         if (this.onTranscriptionCallback && transcription.text && transcription.text.trim() !== '') {
-          // Add speaker info to transcription result
+          // Check for avatar name detection
+          const avatarName = "Anu";
+          const containsAvatarName = transcription.text.toLowerCase().includes(avatarName.toLowerCase());
+          
+          // Add speaker info and name detection to transcription result
           const resultWithSpeaker = {
             ...transcription,
-            speaker: this.currentSpeaker
+            speaker: this.currentSpeaker,
+            containsAvatarName
           };
+          
+          // If avatar name is detected, call the name detection callback first
+          if (containsAvatarName && this.nameDetectionCallback) {
+            console.log('🎯 Avatar name detected in transcription:', transcription.text);
+            this.nameDetectionCallback(resultWithSpeaker);
+          }
+          
+          // Always call the regular transcription callback for display
           this.onTranscriptionCallback(resultWithSpeaker);
         }
       } else {

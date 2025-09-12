@@ -12,7 +12,7 @@ export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeo
 let AVATAR_VOICE_LANGUAGE = "en" // "et"
 let TRANSCRIPTION_LANGUAGE = "et"; // "en"
 let AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public";
-let AVATAR_GENDER = "female" // "male"
+let AVATAR_GENDER = "felame" // "male"
 export let AVATAR_HUMAN_NAME = "Anu";
 const AVAILABLE_VOICE_IDS = {
   EE_KERT: "adc699478776486997dcf2f7b1534a89",

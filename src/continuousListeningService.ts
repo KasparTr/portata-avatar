@@ -395,7 +395,8 @@ export class ContinuousListeningService {
         // Silence detected
         const silenceDuration = now - this.lastSoundTime;
         
-        if (silenceDuration > AVATAR_AUDIO_CONFIG.SILENCE_DURATION && !this.silenceTimer && !this.isPaused && !this.isAvatarSpeaking) {
+        // Increased silence duration to 3 seconds to prevent excessive processing
+        if (silenceDuration > 3000 && !this.silenceTimer && !this.isPaused && !this.isAvatarSpeaking) {
           console.log(`🎧 Silence detected for ${silenceDuration}ms, processing for name detection`);
           this.silenceTimer = setTimeout(() => {
             if (this.isListening && this.audioChunks.length > 0 && !this.isPaused && !this.isAvatarSpeaking && this.mediaRecorder && this.mediaRecorder.state === 'recording') {
@@ -404,7 +405,7 @@ export class ContinuousListeningService {
               this.mediaRecorder.stop();
             }
             this.silenceTimer = null;
-          }, AVATAR_AUDIO_CONFIG.TRANSCRIPTION_TRIGGER_DELAY);
+          }, 500); // Reduced trigger delay
         }
       }
       
@@ -476,8 +477,10 @@ export class ContinuousListeningService {
       }
     } catch (error) {
       console.error('Error restarting continuous listening:', error);
-      if (this.config.onError) {
-        this.config.onError(error as Error);
+      // Don't call onError to prevent infinite loops
+      // Still restart listening even on error, but only if not avatar speaking
+      if (!this.isAvatarSpeaking) {
+        this.restartContinuousListening();
       }
     }
   }
