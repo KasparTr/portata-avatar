@@ -29,6 +29,7 @@ export class ContinuousListeningService {
   private isAvatarSpeaking = false;
   private voiceActivityThreshold = 0.15; // Higher threshold for human voice detection
   private dedicatedAudioStream: MediaStream | null = null; // Separate stream for Anu listening
+  private currentSilenceThreshold: number = AVATAR_AUDIO_CONFIG.SILENCE_THRESHOLD; // Configurable threshold
 
   constructor(config: ContinuousListeningConfig) {
     this.config = {
@@ -74,6 +75,34 @@ export class ContinuousListeningService {
       await this.setupAudioAnalysis();
     } catch (error) {
       throw new Error(`Failed to initialize continuous listening: ${error}`);
+    }
+  }
+
+  /**
+   * Initialize with a shared audio stream (to avoid microphone conflicts)
+   */
+  async initializeWithStream(audioStream: MediaStream): Promise<void> {
+    try {
+      // Use the shared stream for Anu listening
+      this.audioStream = audioStream;
+      this.dedicatedAudioStream = audioStream;
+
+      // Try different audio formats, prioritizing more compatible formats
+      let mimeType: string = AVATAR_AUDIO_CONFIG.PREFERRED_MIME_TYPES[0];
+      for (const preferredType of AVATAR_AUDIO_CONFIG.PREFERRED_MIME_TYPES) {
+        if (MediaRecorder.isTypeSupported(preferredType)) {
+          mimeType = preferredType;
+          break;
+        }
+      }
+      
+      console.log('🎧 Anu continuous listening using shared audio stream with format:', mimeType);
+      await this.createMediaRecorder();
+      
+      // Set up audio analysis for silence detection
+      await this.setupAudioAnalysis();
+    } catch (error) {
+      throw new Error(`Failed to initialize continuous listening with shared stream: ${error}`);
     }
   }
 
@@ -334,6 +363,7 @@ export class ContinuousListeningService {
 
   /**
    * Start monitoring audio levels for silence detection
+   * This is ESSENTIAL for avatar responsiveness - detects when user stops speaking
    */
   private startSilenceDetection(): void {
     if (!this.analyser || !this.isListening) return;
@@ -352,25 +382,9 @@ export class ContinuousListeningService {
       
       const now = Date.now();
       
-      if (normalizedLevel > AVATAR_AUDIO_CONFIG.SILENCE_THRESHOLD) {
+      if (normalizedLevel > this.currentSilenceThreshold) {
         // Sound detected
         this.lastSoundTime = now;
-        
-        // Check for interrupt detection when avatar is speaking
-        if (this.isAvatarSpeaking && this.config.enableInterruptDetection && normalizedLevel > this.voiceActivityThreshold) {
-          console.log(`🎤 Strong voice activity detected while avatar speaking (${normalizedLevel.toFixed(3)}) - potential interrupt`);
-          // Trigger immediate processing to check for user voice
-          if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
-            console.log('🎤 Stopping recording to process potential interrupt');
-            this.mediaRecorder.stop();
-            // Clear silence timer to avoid conflicts
-            if (this.silenceTimer) {
-              clearTimeout(this.silenceTimer);
-              this.silenceTimer = null;
-            }
-            interruptAvatar();
-          }
-        }
         
         // Clear any existing silence timer
         if (this.silenceTimer) {
@@ -405,19 +419,20 @@ export class ContinuousListeningService {
     checkAudioLevel();
   }
 
+  /**
+   * Update the silence threshold for dynamic adjustment
+   */
+  updateSilenceThreshold(threshold: number): void {
+    this.currentSilenceThreshold = threshold;
+    console.log(`🎧 Updated silence threshold to: ${Math.round(threshold * 100)}%`);
+  }
 
   /**
    * Restart continuous listening after processing
    */
   private async restartContinuousListening(): Promise<void> {
-    if (!this.isListening || !this.audioStream) {
-      console.log('🎧 Cannot restart - not in listening state or no audio stream');
-      return;
-    }
-
-    // If paused but interrupt detection enabled, still restart for interrupt monitoring
-    if (this.isPaused && !this.config.enableInterruptDetection) {
-      console.log('🎧 Skipping restart - service is paused and no interrupt detection');
+    if (!this.isListening) {
+      console.log('🎧 Not restarting - service is not in listening state');
       return;
     }
     
@@ -428,21 +443,37 @@ export class ContinuousListeningService {
     try {
       console.log('🎧 Restarting continuous listening after processing...');
       
+      // Wait a bit to ensure previous MediaRecorder is fully stopped
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Check if audio stream is still active
+      if (!this.audioStream || this.audioStream.getTracks().every(track => track.readyState === 'ended')) {
+        console.log('🎧 Audio stream ended, reinitializing...');
+        await this.reinitializeAudioStream();
+      }
+      
       // Create new MediaRecorder for continued listening
-      const mimeType = this.mediaRecorder?.mimeType || 'audio/wav';
+      if (!this.audioStream) {
+        throw new Error('Audio stream is null, cannot create MediaRecorder');
+      }
+      const mimeType = this.mediaRecorder?.mimeType || AVATAR_AUDIO_CONFIG.PREFERRED_MIME_TYPES[0];
       this.mediaRecorder = new MediaRecorder(this.audioStream, { mimeType });
       this.setupMediaRecorderEvents();
       
       // Clear audio chunks for new recording session
       this.audioChunks = [];
       
-      // Start recording again
-      this.mediaRecorder.start(AVATAR_AUDIO_CONFIG.MEDIA_RECORDER_TIMESLICE);
-      
-      // Restart silence detection (this will reset the chunk timer)
-      this.startSilenceDetection();
-      
-      console.log('🎧 Continuous listening restarted successfully');
+      // Start recording again only if MediaRecorder is in inactive state
+      if (this.mediaRecorder && this.mediaRecorder.state === 'inactive') {
+        this.mediaRecorder.start(AVATAR_AUDIO_CONFIG.MEDIA_RECORDER_TIMESLICE);
+        
+        // Restart silence detection (this will reset the chunk timer)
+        this.startSilenceDetection();
+        
+        console.log('🎧 Continuous listening restarted successfully');
+      } else {
+        console.log('🎧 MediaRecorder not in inactive state, skipping restart');
+      }
     } catch (error) {
       console.error('Error restarting continuous listening:', error);
       if (this.config.onError) {
@@ -655,7 +686,11 @@ export class ContinuousListeningService {
     
     formData.append('file', audioBlob, filename);
     formData.append('model_id', AVATAR_AUDIO_CONFIG.MODEL);
-    formData.append("diarize", JSON.stringify(AVATAR_AUDIO_CONFIG.DIARIZE));
+    
+    // Only add diarize if it's true (boolean, not JSON string)
+    if (AVATAR_AUDIO_CONFIG.DIARIZE) {
+      formData.append('diarize', 'true');
+    }
 
     console.log('🎧 Sending transcription request for name detection with filename:', filename);
     

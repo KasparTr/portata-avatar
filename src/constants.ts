@@ -60,12 +60,12 @@ export const AUDIO_TRANSCRIPTION_DEFAULTS = {
   
   // Transcription Timing
   CHUNK_DURATION: 1000, // 1 second chunks for faster processing
-  MIN_CHUNK_SIZE: 8000, // Reduced minimum size for faster transcription
-  MAX_BATCH_DURATION: 10000, // 10 seconds max before forced processing
+  MIN_CHUNK_SIZE: 12000, // Reduced minimum size for faster transcription
+  MAX_BATCH_DURATION: 15000, // 10 seconds max before forced processing
   
   // Silence Detection
-  SILENCE_THRESHOLD: 0.01, // Audio level threshold for silence
-  SILENCE_DURATION: 800, // 800ms silence detection for batch processing
+  SILENCE_THRESHOLD: 0.07, // Audio level threshold for silence
+  SILENCE_DURATION: 1000, // 800ms silence detection for batch processing
   
   // Audio Analysis
   FFT_SIZE: 256,

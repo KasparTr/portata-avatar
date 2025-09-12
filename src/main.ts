@@ -31,6 +31,11 @@ const avatarLabel = document.getElementById("avatarLabel") as HTMLElement;
 const transcriptionLabel = document.getElementById("transcriptionLabel") as HTMLElement;
 const leverControl = document.getElementById("leverControl") as HTMLElement;
 const dragHandle = document.getElementById("dragHandle") as HTMLElement;
+const sensitivityMeter = document.getElementById("sensitivityLevel") as HTMLElement;
+const sensitivityValue = document.getElementById("sensitivityValue") as HTMLElement;
+const silenceThreshold = document.getElementById("silenceThreshold") as HTMLInputElement;
+const thresholdValue = document.getElementById("thresholdValue") as HTMLElement;
+const continuousListeningStatus = document.getElementById("continuousListeningStatus") as HTMLElement;
 
 let avatar: StreamingAvatar | null = null;
 let sessionData: any = null;
@@ -49,8 +54,14 @@ let isAvatarSpeaking: boolean = false;
 let knowledgeBaseService: KnowledgeBaseService | null = null;
 let continuousListeningService: ContinuousListeningService | null = null;
 let isContinuousListeningActive: boolean = false;
-let continuousListeningStatus: HTMLElement | null = null;
 let pendingAvatarResponse: string | null = null;
+let sharedAudioStream: MediaStream | null = null;
+let isAvatarStreamReady: boolean = false; // Track if avatar stream is ready
+
+// Audio sensitivity monitoring
+let audioContext: AudioContext | null = null;
+let analyser: AnalyserNode | null = null;
+let currentSilenceThreshold: number = 0.05; // Default 5%
 
 // Drag functionality variables
 let isDragging = false;
@@ -82,18 +93,43 @@ async function initializeAvatarSession() {
     avatar.on(StreamingEvents.STREAM_DISCONNECTED, handleStreamDisconnected);
     avatar.on(StreamingEvents.AVATAR_START_TALKING, handleAvatarStartTalking);
     avatar.on(StreamingEvents.AVATAR_STOP_TALKING, handleAvatarStopTalking);
-    sessionData = await avatar.createStartAvatar(createAvatarConfig());
-
+    
+    sessionData = await avatar.newSession(createAvatarConfig());
+    console.log('🎯 Avatar session created:', !!sessionData);
+    console.log('🎯 Avatar instance state:', avatar ? 'exists' : 'null');
+    
+    // Try to start session, but ignore 400 error if already started
+    try {
+      console.log('🎯 Attempting to start avatar session...');
+      const startResult = await avatar.startSession();
+      console.log('🎯 Avatar session started successfully:', startResult);
+    } catch (error) {
+      console.log('🎯 StartSession failed (likely already started):');
+      // This is expected if session is already started by createStartAvatar
+    }
+    
     // Enable start button, keep stop button disabled until avatar speaks
     endButton.disabled = false;
     startButton.disabled = true;
     
+    // Create shared audio stream first to ensure microphone access
+    console.log('🎤 Creating shared audio stream...');
+    await getSharedAudioStream();
+
     // Start continuous transcription when session starts (this will handle everything)
     console.log('🎤 Attempting to start continuous transcription...');
     await startContinuousTranscription();
     
     // Initialize continuous listening but don't start it yet (transcription takes priority)
     await initializeContinuousListening();
+    
+    // Initialize audio sensitivity monitoring
+    initializeAudioSensitivityMonitor();
+    
+    // Start audio level monitoring with shared stream
+    if (sharedAudioStream) {
+      startAudioLevelMonitoring(sharedAudioStream);
+    }
   } catch (error) {
     console.error("Failed to initialize avatar session:", error);
     
@@ -130,7 +166,7 @@ function createAvatarConfig(){
 
 // Handle avatar speaking events
 function handleAvatarStartTalking() {
-  console.log("Avatar started talking");
+  console.log("🎯 Avatar started talking - event fired");
   isAvatarSpeaking = true;
   
   // Stop continuous transcription when avatar starts speaking
@@ -156,7 +192,7 @@ function handleAvatarStartTalking() {
 }
 
 function handleAvatarStopTalking() {
-  console.log("Avatar stopped talking");
+  console.log("🎯 Avatar stopped talking - event fired");
   isAvatarSpeaking = false;
   
   // Restart continuous transcription when avatar stops speaking
@@ -173,21 +209,107 @@ function handleAvatarStopTalking() {
   if (repeatButton) repeatButton.disabled = false;
 }
 
+// Initialize audio sensitivity monitoring
+function initializeAudioSensitivityMonitor() {
+  // Set up threshold slider
+  silenceThreshold.addEventListener('input', (e) => {
+    const target = e.target as HTMLInputElement;
+    currentSilenceThreshold = parseFloat(target.value);
+    thresholdValue.textContent = `${Math.round(currentSilenceThreshold * 100)}%`;
+    
+    // Update the continuous listening service with new threshold
+    if (continuousListeningService) {
+      continuousListeningService.updateSilenceThreshold(currentSilenceThreshold);
+    }
+  });
+  
+  // Initialize threshold display
+  thresholdValue.textContent = `${Math.round(currentSilenceThreshold * 100)}%`;
+  silenceThreshold.value = currentSilenceThreshold.toString();
+}
+
+// Start audio level monitoring
+function startAudioLevelMonitoring(stream: MediaStream) {
+  try {
+    audioContext = new AudioContext();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    
+    function updateAudioLevel() {
+      if (!analyser) return;
+      
+      analyser.getByteFrequencyData(dataArray);
+      const average = dataArray.reduce((sum, value) => sum + value, 0) / bufferLength;
+      const normalizedLevel = average / 255;
+      
+      // Update UI
+      const percentage = Math.round(normalizedLevel * 100);
+      sensitivityMeter.style.width = `${percentage}%`;
+      sensitivityValue.textContent = `${percentage}%`;
+      
+      // Update status based on threshold
+      const isAboveThreshold = normalizedLevel > currentSilenceThreshold;
+      if (continuousListeningStatus) {
+        if (isAboveThreshold) {
+          continuousListeningStatus.textContent = `🎧 Listening: Audio detected (${percentage}%)`;
+          continuousListeningStatus.style.background = '#d4edda';
+          continuousListeningStatus.style.borderColor = '#c3e6cb';
+          continuousListeningStatus.style.color = '#155724';
+        } else {
+          continuousListeningStatus.textContent = `🎧 Listening: Silence detected (${percentage}%)`;
+          continuousListeningStatus.style.background = '#f8f9fa';
+          continuousListeningStatus.style.borderColor = '#dee2e6';
+          continuousListeningStatus.style.color = '#495057';
+        }
+      }
+      
+      requestAnimationFrame(updateAudioLevel);
+    }
+    
+    updateAudioLevel();
+  } catch (error) {
+    console.error('Failed to initialize audio level monitoring:', error);
+  }
+}
 
 // Handle when avatar stream is ready
 function handleStreamReady(event: any) {
+  console.log('🎯 Avatar stream ready event fired');
+  isAvatarStreamReady = true;
+  
   if (event.detail && videoElement) {
     videoElement.srcObject = event.detail;
     videoElement.onloadedmetadata = () => {
       videoElement.play().catch(console.error);
       // Show video and hide placeholder
-      videoElement.style.display = 'block';
+      videoElement.style.display = 'flex';
       if (avatarPlaceholder) {
         avatarPlaceholder.style.display = 'none';
       }
+      console.log('🎯 Avatar video stream is now playing and ready for speech');
+      
+      // If there's a pending avatar response, speak it now
+      if (pendingAvatarResponse && avatar) {
+        console.log('🎯 Speaking pending response now that stream is ready:', pendingAvatarResponse);
+        avatar.speak({ text: pendingAvatarResponse, task_type: TaskType.TALK })
+          .then(() => {
+            console.log('🎯 Pending response spoken successfully');
+            pendingAvatarResponse = null;
+          })
+          .catch((error) => {
+            console.error('🎯 Error speaking pending response:', error);
+          });
+      }
     };
   } else {
-    console.error("Stream is not available");
+    console.log('🎯 No avatar stream available in event');
+    console.log('🎯 Session data exists:', !!sessionData);
   }
 }
 
@@ -277,7 +399,7 @@ async function handleRepeat() {
   }
 }
 
-// Initialize transcription service
+// Initialize continuous transcription service
 async function initializeTranscriptionService() {
   const elevenlabsApiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
   
@@ -301,8 +423,10 @@ async function initializeTranscriptionService() {
   });
 
   try {
-    await transcriptionService.initialize();
-    console.log('✅ Transcription service initialized successfully');
+    // Use shared audio stream to avoid microphone conflicts
+    const audioStream = await getSharedAudioStream();
+    await transcriptionService.initializeWithStream(audioStream);
+    console.log('✅ Transcription service initialized with shared audio stream');
   } catch (error) {
     console.error('❌ Failed to initialize transcription service:', error);
     transcriptionService = null;
@@ -828,6 +952,23 @@ function isTypingInInput(target: EventTarget | null): boolean {
   return element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable;
 }
 
+// Get or create shared audio stream
+async function getSharedAudioStream(): Promise<MediaStream> {
+  if (!sharedAudioStream) {
+    sharedAudioStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+    console.log('🎤 Created shared audio stream for both services');
+  }
+  return sharedAudioStream;
+}
+
 // Initialize continuous listening service
 async function initializeContinuousListening() {
   const elevenlabsApiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
@@ -855,10 +996,13 @@ async function initializeContinuousListening() {
   });
 
   try {
-    await continuousListeningService.initialize();
-    // Don't start listening immediately - let transcription service handle microphone first
-    isContinuousListeningActive = false;
-    console.log('🎧 Continuous listening initialized (not started - transcription has priority)');
+    // Use shared audio stream to avoid microphone conflicts
+    const audioStream = await getSharedAudioStream();
+    await continuousListeningService.initializeWithStream(audioStream);
+    // Start listening for avatar name detection
+    await continuousListeningService.startListening();
+    isContinuousListeningActive = true;
+    console.log('🎧 Continuous listening initialized with shared stream and started - listening for avatar name');
     updateContinuousListeningUI();
   } catch (error) {
     console.error('Failed to initialize continuous listening:', error);
@@ -905,33 +1049,60 @@ async function handleAvatarNameDetected(transcription: string) {
   // Trigger avatar to respond
   if (avatar) {
     try {
-      await avatar.speak({
-        text: transcription,
-        taskType: TaskType.TALK // Use TALK to get a conversational response
-      });
+      console.log('🎯 Avatar exists, attempting to make it speak...');
+      console.log('🎯 Avatar session data:', !!sessionData);
+      console.log('🎯 Avatar session ID:', sessionData?.session_id);
+      console.log('🎯 Avatar stream ready:', isAvatarStreamReady);
       
-      // Restart continuous transcription after avatar finishes speaking (if it was running before)
+      if (!isAvatarStreamReady) {
+        console.log('🎯 ⚠️ Avatar stream not ready yet - waiting for STREAM_READY event');
+        // Store the transcription to speak once stream is ready
+        pendingAvatarResponse = transcription;
+        return;
+      }
+      
+      console.log('🎯 Calling avatar.speak() with text:', transcription);
+      console.log('🎯 Avatar config being used:', createAvatarConfig());
+      
+      
+      // Try with TALK task type
+      console.log('🎯 Testing with TALK task type...');
+      try {
+        const talkResult = await avatar.speak({ 
+          text: transcription, 
+          task_type: TaskType.TALK 
+        });
+        console.log('🎯 TALK test result:', talkResult);
+        console.log('🎯 TALK test result type:', typeof talkResult);
+      } catch (error) {
+        console.error('🎯 Error with TALK:', error);
+      }
+
+      // Check if avatar is actually ready to speak
+      console.log('🎯 Checking avatar state after speak call...');
+      
+      // Restart transcription after avatar finishes speaking
       if (wasAutoTranscribing) {
-        setTimeout(async () => {
-          if (!isAvatarSpeaking && !isAutoTranscribing) {
-            console.log('🎤 Restarting continuous transcription after Anu response');
-            await startContinuousTranscription();
-          }
-        }, 1000); // Wait 1 second after avatar stops speaking
+        setTimeout(() => {
+          console.log('🎤 Restarting continuous transcription after Anu response');
+          startContinuousTranscription();
+        }, 1000);
       }
     } catch (error) {
-      console.error('Error making avatar speak:', error);
-      pendingAvatarResponse = null; // Clear on error
+      console.log('🎯 Error making avatar speak:', error);
+      console.log('🎯 Error details:', JSON.stringify(error, null, 2));
       
-      // Restart continuous transcription even on error if it was running before
+      // Still restart transcription even if speak failed
       if (wasAutoTranscribing) {
-        setTimeout(async () => {
-          if (!isAutoTranscribing) {
-            await startContinuousTranscription();
-          }
+        setTimeout(() => {
+          console.log('🎤 Restarting continuous transcription after Anu response (error case)');
+          startContinuousTranscription();
         }, 1000);
       }
     }
+  } else {
+    console.log('🎯 No avatar instance available - avatar is null');
+    console.log('🎯 Session data exists:', !!sessionData);
   }
 }
 
@@ -949,20 +1120,6 @@ async function handleUserInterrupt(transcription: string) {
     try {
       console.log('🛑 Interrupting avatar speech due to user voice');
       await avatar.interrupt();
-      
-      // For background talking, ask user to speak more clearly
-      if (transcription.includes('people talking') || transcription.includes('background')) {
-        await avatar.speak({
-          text: "I heard you speaking. Could you please repeat that more clearly?",
-          taskType: TaskType.TALK
-        });
-      } else {
-        // Process the interrupt as a new conversation
-        await avatar.speak({
-          text: transcription,
-          taskType: TaskType.TALK
-        });
-      }
     } catch (error) {
       console.error('Error interrupting avatar:', error);
     }

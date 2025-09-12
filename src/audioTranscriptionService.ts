@@ -88,6 +88,32 @@ export class AudioTranscriptionService {
   }
 
   /**
+   * Initialize with a shared audio stream (to avoid microphone conflicts)
+   */
+  async initializeWithStream(audioStream: MediaStream): Promise<void> {
+    try {
+      this.audioStream = audioStream;
+
+      // Try different audio formats, prioritizing more compatible formats
+      let mimeType: string = AUDIO_TRANSCRIPTION_DEFAULTS.PREFERRED_MIME_TYPES[0];
+      for (const preferredType of AUDIO_TRANSCRIPTION_DEFAULTS.PREFERRED_MIME_TYPES) {
+        if (MediaRecorder.isTypeSupported(preferredType)) {
+          mimeType = preferredType;
+          break;
+        }
+      }
+      
+      console.log('Using shared audio stream with format:', mimeType);
+      await this.createMediaRecorder();
+      
+      // Set up audio analysis for silence detection
+      await this.setupAudioAnalysis();
+    } catch (error) {
+      throw new Error(`Failed to initialize with shared audio stream: ${error}`);
+    }
+  }
+
+  /**
    * Create or recreate MediaRecorder instance
    */
   private async createMediaRecorder(): Promise<void> {
@@ -317,76 +343,16 @@ export class AudioTranscriptionService {
 
   /**
    * Start silence detection and 20-second timer for buffer switching
+   * DISABLED: Silence detection causes too many API requests
    */
   private startSilenceDetection(): void {
-    if (!this.audioAnalyzer || !this.isRecording) {
-      console.log('🎤 Cannot start silence detection - missing requirements');
-      return;
-    }
-
-    console.log('🎤 Starting silence detection monitoring for buffer switching');
+    // SILENCE DETECTION DISABLED - causes excessive API requests
+    // Only rely on max batch timer now
+    console.log('🎤 Silence detection disabled, using only max batch timer');
     
     // Start 20-second max timer
     this.startMaxBatchTimer();
-    
-    const checkAudioLevel = () => {
-      if (!this.audioAnalyzer || !this.isRecording) {
-        console.log('🎤 Stopping silence detection - no analyzer or not recording');
-        return;
-      }
-
-      const bufferLength = this.audioAnalyzer.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      this.audioAnalyzer.getByteFrequencyData(dataArray);
-
-      // Calculate average volume
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i];
-      }
-      const average = sum / bufferLength / 255; // Normalize to 0-1
-
-      const now = Date.now();
-
-      if (average > (this.config.silenceThreshold || AUDIO_TRANSCRIPTION_DEFAULTS.SILENCE_THRESHOLD)) {
-        // Sound detected, update last sound time
-        this.lastSoundTime = now;
-        
-        // Clear any existing silence timer
-        if (this.silenceTimer) {
-          clearTimeout(this.silenceTimer);
-          this.silenceTimer = null;
-        }
-      } else {
-        // Silence detected
-        const silenceDuration = now - this.lastSoundTime;
-        
-        if (silenceDuration > (this.config.silenceDuration || AUDIO_TRANSCRIPTION_DEFAULTS.SILENCE_DURATION) && !this.silenceTimer) {
-          console.log(`🎤 Silence detected for ${silenceDuration}ms, switching buffer`);
-          this.silenceTimer = setTimeout(() => {
-            if (this.isRecording && this.currentBuffer.length > 0) {
-              console.log('🎤 Silence-triggered buffer switch');
-              this.switchBuffer();
-            }
-            this.silenceTimer = null;
-          }, AUDIO_TRANSCRIPTION_DEFAULTS.TRANSCRIPTION_TRIGGER_DELAY);
-        }
-      }
-      
-      // Continue monitoring
-      if (this.isRecording) {
-        setTimeout(checkAudioLevel, AUDIO_TRANSCRIPTION_DEFAULTS.AUDIO_CHECK_INTERVAL);
-      }
-    };
-    
-    // Initialize last sound time
-    this.lastSoundTime = Date.now();
-    checkAudioLevel();
   }
-
-  /**
-   * Start the 10-second max batch timer
-   */
   private startMaxBatchTimer(): void {
     if (this.maxBatchTimer) {
       clearTimeout(this.maxBatchTimer);
@@ -522,7 +488,11 @@ export class AudioTranscriptionService {
     
     formData.append('file', audioBlob, filename);
     formData.append('model_id', AUDIO_TRANSCRIPTION_DEFAULTS.MODEL);
-    formData.append("diarize", JSON.stringify(AUDIO_TRANSCRIPTION_DEFAULTS.DIARIZE));
+    
+    // Only add diarize if it's true (boolean, not JSON string)
+    if (AUDIO_TRANSCRIPTION_DEFAULTS.DIARIZE) {
+      formData.append('diarize', 'true');
+    }
 
     console.log('Sending transcription request to ElevenLabs API with filename:', filename);
     
