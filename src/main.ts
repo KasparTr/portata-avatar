@@ -115,7 +115,8 @@ async function initializeAvatarSession() {
     await avatar.startVoiceChat();
     setTimeout(() => {
       console.log('🎯 Avatar voice chat started');
-      // Hide loading overlay
+      // Hide loading overlay.
+      avatar?.muteInputAudio(); // mute by default
       if (avatarLoadingOverlay) {
         avatarLoadingOverlay.style.display = 'none';
       }
