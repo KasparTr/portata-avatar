@@ -7,7 +7,6 @@ import { AudioTranscriptionService, type TranscriptionResult } from "./audioTran
 import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, KNOWLEDGEBASE_BASE } from './constants';
 import type { TranscriptionStrategyType } from './constants';
 import { KnowledgeBaseService } from './knowledgeBaseService';
-import { ContinuousListeningService } from './continuousListeningService';
 
 // DOM elements
 const videoElement = document.getElementById("avatarVideo") as HTMLVideoElement;
@@ -20,8 +19,6 @@ const stopSpeakingButton = document.getElementById("stopSpeaking") as HTMLButton
 const speakButton = document.getElementById("speakButton") as HTMLButtonElement;
 const repeatButton = document.getElementById("repeatButton") as HTMLButtonElement;
 const userInput = document.getElementById("userInput") as HTMLInputElement;
-const startRecordingButton = document.getElementById("startRecordingButton") as HTMLButtonElement;
-const stopRecordingButton = document.getElementById("stopRecordingButton") as HTMLButtonElement;
 const transcriptionOutput = document.getElementById("transcriptionOutput") as HTMLTextAreaElement;
 const saveTranscriptionButton = document.getElementById("saveTranscriptionButton") as HTMLButtonElement;
 const sensitivityMeter = document.getElementById("sensitivityLevel") as HTMLElement;
@@ -32,6 +29,7 @@ const continuousListeningStatus = document.getElementById("continuousListeningSt
 const avatarListeningIndicator = document.getElementById("avatarListeningIndicator") as HTMLElement;
 const avatarListeningLight = document.getElementById("avatarListeningLight") as HTMLElement;
 const avatarListeningText = document.getElementById("avatarListeningText") as HTMLElement;
+const avatarLoadingOverlay = document.getElementById("avatarLoadingOverlay") as HTMLElement;
 
 let avatar: StreamingAvatar | null = null;
 let sessionData: any = null;
@@ -46,13 +44,37 @@ let isAutoTranscribing: boolean = false; // Separate flag for automatic transcri
 let isAvatarSpeaking: boolean = false;
 let isAvatarListening: boolean = false;
 let knowledgeBaseService: KnowledgeBaseService | null = null;
-let continuousListeningService: ContinuousListeningService | null = null;
-let sharedAudioStream: MediaStream | null = null;
 
-// Audio sensitivity monitoring
+// Audio sensitivity and gating
 let audioContext: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
-let currentSilenceThreshold: number = 0.05; // Default 5%
+let currentSilenceThreshold: number = 0.15; // Increased from 0.05 to 0.15 (15%)
+let isSoundAboveThreshold: boolean = false;
+
+// Knowledge Base
+let knowledgeBaseLatest: string = "";
+
+// Global variable to track last speaker
+let lastSpeaker: string = '';
+
+// #####################
+// #### AUDIO PICKUP ###
+// #####################
+// pick a specific mic if you can discover it first via enumerateDevices()
+const AUDIO_STREAM_CONFIG: MediaStreamConstraints = {
+  audio: {
+    channelCount: { ideal: 1 },
+    sampleRate:   { ideal: 16000 },        // hint only; may be ignored
+    echoCancellation: { ideal: true },
+    noiseSuppression: { ideal: true },
+    autoGainControl:  { ideal: false },    // avoid pumping room noise
+    // latency:          { ideal: 0.02 },     // hint; safe to keep
+    // deviceId: { exact: 'preferred-mic-id' }, // use a headset / directional mic
+  }
+};
+
+let sharedAudioStream: MediaStream | null = null;
+
 
 // Helper function to fetch access token
 async function fetchAccessToken(): Promise<string> {
@@ -72,6 +94,10 @@ async function fetchAccessToken(): Promise<string> {
 // Initialize streaming avatar session
 async function initializeAvatarSession() {
   try {
+    // Show loading overlay
+    if (avatarLoadingOverlay) {
+      avatarLoadingOverlay.style.display = 'flex';
+    }
     console.log("Starting avatar session initialization...");
     const token = await fetchAccessToken();
     avatar = new StreamingAvatar({ token });
@@ -85,9 +111,15 @@ async function initializeAvatarSession() {
     console.log('🎯 Avatar session created:', !!sessionData);
     
     // Start avatar voice chat session
+    avatar?.muteInputAudio(); // mute by default
     await avatar.startVoiceChat();
-    console.log('🎯 Avatar voice chat started');
-    avatar.muteInputAudio(); // mute by default
+    setTimeout(() => {
+      console.log('🎯 Avatar voice chat started');
+      // Hide loading overlay
+      if (avatarLoadingOverlay) {
+        avatarLoadingOverlay.style.display = 'none';
+      }
+    }, 1000);
     
     // Enable start button, keep stop button disabled until avatar speaks
     endButton.disabled = false;
@@ -95,7 +127,7 @@ async function initializeAvatarSession() {
     
     // Create shared audio stream first to ensure microphone access
     console.log('🎤 Creating shared audio stream...');
-    await getSharedAudioStream();
+    await getCleanSharedAudioStream();
 
     // Initialize transcription service (separate from avatar)
     console.log('🎤 Initializing transcription service...');
@@ -133,12 +165,11 @@ function createAvatarConfig(){
   const config = {
     quality: AvatarQuality.High,
     avatarName: AVATAR_DEFAULTS.AVATAR_NAME,
-    // Remove knowledgeId to use custom knowledgeBase instead
-    // knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID,
+    knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID,
     language: AVATAR_DEFAULTS.LANGUAGE,
     voice: {},
-    // Add explicit instruction to respond in English
-    knowledgeBase: KNOWLEDGEBASE_BASE
+    activityIdleTimeout: AVATAR_DEFAULTS.ACTIVITY_IDLE_TIMEOUT,
+    // knowledgeBase: knowledgeBaseLatest
   }
   if(AVATAR_DEFAULTS.VOICE_ID){
     config.voice = {
@@ -160,14 +191,8 @@ function updateTranscriptionStatus(status: string) {
 
 // Handle avatar speaking events
 function handleAvatarStartTalking() {
-  console.log('🎯 Avatar started talking');
   isAvatarSpeaking = true;
-
-  // Pause transcription to avoid picking up avatar speech
-  if (transcriptionService && isAutoTranscribing) {
-    transcriptionService.stopRecording();
-    isAutoTranscribing = false;
-  }
+  // stopContinuousTranscription();
   
   // Update UI to show avatar is speaking
   updateTranscriptionStatus('🎯 Avatar speaking...');
@@ -179,15 +204,13 @@ function handleAvatarStartTalking() {
 }
 
 async function handleAvatarStopTalking() {
-  console.log('🎯 Avatar stopped talking');
   isAvatarSpeaking = false;
-  
 
-  // Resume transcription after avatar finishes
-  if (transcriptionService && !isAutoTranscribing) {
-    await startContinuousTranscription();
-  }
-  
+  // // Resume transcription after avatar finishes
+  // if (transcriptionService && !isAutoTranscribing) {
+  //   console.log('🎤 Resuming continuous transcription...');
+  //   await startContinuousTranscription();
+  // }
   
   // Disable stop speaking button and re-enable other buttons when avatar stops
   stopSpeakingButton.disabled = true;
@@ -202,10 +225,10 @@ function initializeAudioSensitivityMonitor() {
     const target = e.target as HTMLInputElement;
     currentSilenceThreshold = parseFloat(target.value);
     thresholdValue.textContent = `${Math.round(currentSilenceThreshold * 100)}%`;
-    
-    // Update the continuous listening service with new threshold
-    if (continuousListeningService) {
-      continuousListeningService.updateSilenceThreshold(currentSilenceThreshold);
+
+    // Update transcription service threshold if it exists
+    if (transcriptionService) {
+      transcriptionService.updateSilenceThreshold(currentSilenceThreshold);
     }
   });
   
@@ -240,14 +263,17 @@ function startAudioLevelMonitoring(stream: MediaStream) {
       sensitivityValue.textContent = `${percentage}%`;
       
       // Update status based on threshold
-      const isAboveThreshold = normalizedLevel > currentSilenceThreshold;
+      let isAboveThreshold = normalizedLevel > currentSilenceThreshold;
+      isSoundAboveThreshold = isAboveThreshold;
       if (continuousListeningStatus) {
         if (isAboveThreshold) {
+          // startContinuousTranscription();
           continuousListeningStatus.textContent = `🎧 Listening: Audio detected (${percentage}%)`;
           continuousListeningStatus.style.background = '#d4edda';
           continuousListeningStatus.style.borderColor = '#c3e6cb';
           continuousListeningStatus.style.color = '#155724';
         } else {
+          // stopContinuousTranscription();
           continuousListeningStatus.textContent = `🎧 Listening: Silence detected (${percentage}%)`;
           continuousListeningStatus.style.background = '#f8f9fa';
           continuousListeningStatus.style.borderColor = '#dee2e6';
@@ -314,9 +340,6 @@ export async function interruptAvatar() {
 async function terminateAvatarSession() {
   if (!avatar || !sessionData) return;
 
-  // Stop continuous listening
-  await stopContinuousListening();
-  
   // Stop continuous transcription
   await stopContinuousTranscription();
   
@@ -374,8 +397,6 @@ async function initializeTranscriptionService() {
   const elevenlabsApiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
   
   console.log('🎤 Initializing transcription service...');
-  console.log('🎤 API Key present:', !!elevenlabsApiKey);
-  console.log('🎤 Current strategy:', currentStrategy);
   
   if (!elevenlabsApiKey) {
     console.error('ElevenLabs API key not found in environment variables');
@@ -389,91 +410,31 @@ async function initializeTranscriptionService() {
 
   transcriptionService = new AudioTranscriptionService({
     apiKey: elevenlabsApiKey,
-    strategy: currentStrategy
+    strategy: currentStrategy,
+    silenceThreshold: currentSilenceThreshold
   });
 
   try {
     // Use shared audio stream to avoid microphone conflicts
-    const audioStream = await getSharedAudioStream();
+    const audioStream = await getCleanSharedAudioStream();
     await transcriptionService.initializeWithStream(audioStream);
-    console.log('✅ Transcription service initialized with shared audio stream');
+    console.log('✅ Transcription service initialized');
   } catch (error) {
     console.error('❌ Failed to initialize transcription service:', error);
     transcriptionService = null;
   }
 }
 
-// Get speaker prefix for transcription output using locked speaker
-function getSpeakerPrefix(): string {
-  if (lockedSpeaker === 'custom') {
-    const customInput = document.getElementById('customSpeaker') as HTMLInputElement;
-    const customName = customInput?.value.trim() || 'Speaker';
-    return `[${customName}]: `;
-  }
-  
-  const speaker = SPEAKER_OPTIONS.find(s => s.id === lockedSpeaker);
-  return speaker ? speaker.prefix : '[Speaker]: ';
-}
 
-// Handle transcription start
-async function handleStartTranscription() {
-  if (!transcriptionService) {
-    await initializeTranscriptionService();
-    if (!transcriptionService) return;
-  }
-
-
-  try {
-    await transcriptionService.startRecording(
-      (result: TranscriptionResult) => {
-        let transcriptionText = result.text;
-        
-        // Add speaker prefix for on-demand mode
-        if (currentStrategy === TranscriptionStrategy.ON_DEMAND) {
-          transcriptionText = getSpeakerPrefix() + transcriptionText;
-        }
-        
-        // Store in entire transcript variable
-        const separator = entireTranscript ? '\n\n' : '';
-        entireTranscript = entireTranscript ? `${entireTranscript}${separator}${transcriptionText}` : transcriptionText;
-        
-        // Append new transcription to the output with double line break separation
-        updateLiveTranscription(transcriptionText);
-      },
-      (error: Error) => {
-        console.error('Transcription error:', error);
-      }
-    );
-    
-    startRecordingButton.disabled = true;
-    stopRecordingButton.disabled = false;
-    
-    // Update button text based on strategy
-    if (currentStrategy === TranscriptionStrategy.REAL_TIME) {
-      startRecordingButton.textContent = '🎤 Recording... (Real-time)';
-    } else {
-      startRecordingButton.textContent = '🎤 Recording... (On-demand)';
-    }
-  } catch (error) {
-    console.error('Failed to start recording:', error);
-  }
-}
-
-// Handle transcription stop
-async function handleStopTranscription() {
-  // Lock in the current speaker selection at the moment stop is clicked
-  if (currentStrategy === TranscriptionStrategy.ON_DEMAND) {
-    lockedSpeaker = currentSpeaker;
-  }
-  
-  if (transcriptionService) {
+// Stop continuous transcription
+async function stopContinuousTranscription() {
+  if (transcriptionService && isAutoTranscribing) {
+    console.log('🎤 Stopping continuous transcription');
     await transcriptionService.stopRecording();
+    isAutoTranscribing = false;
   }
-  
-  startRecordingButton.disabled = false;
-  stopRecordingButton.disabled = true;
-  startRecordingButton.textContent = '🎤 Start Transcription';
 }
+
 
 // Initialize knowledge base service
 async function initializeKnowledgeBaseService(): Promise<KnowledgeBaseService | null> {
@@ -496,6 +457,7 @@ async function initializeKnowledgeBaseService(): Promise<KnowledgeBaseService | 
 async function saveTranscriptionToKnowledge() {
   try {
     const transcriptionText = transcriptionOutput.value.trim();
+    knowledgeBaseLatest = KNOWLEDGEBASE_BASE + transcriptionText // not in use.
     
     if (!transcriptionText) return;
 
@@ -548,35 +510,54 @@ async function startContinuousTranscription() {
 
   try {
     console.log('🎤 Starting continuous transcription...');
-    
+
     // Get current speaker for transcription attribution
     const getCurrentSpeaker = () => {
-      const speakerSelect = document.getElementById('speakerSelect') as HTMLSelectElement;
-      return speakerSelect ? speakerSelect.value : 'User';
+      // Check for selected speaker option (radio button or similar)
+      const selectedSpeaker = document.querySelector('input[name="speaker"]:checked') as HTMLInputElement;
+      if (selectedSpeaker) {
+        return selectedSpeaker.value;
+      }
+      
+      // Fallback to a default speaker
+      return 'Panelist';
     };
     
-    // Handle regular transcription results (NO avatar name detection)
-    const handleTranscription = (result: TranscriptionResult) => {
+    // Handle regular transcription results
+    const updateTranscription = (result: TranscriptionResult) => {
       if (!result.text || result.text.trim() === '') return;
       
-      // Add speaker prefix and display transcription
+      // // Add speaker prefix and display transcription
+      // const speaker = result.speaker || getCurrentSpeaker();
+      // const transcriptionText = `[${speaker}]: ${result.text}`;
+      
       const speaker = result.speaker || getCurrentSpeaker();
-      const transcriptionText = `[${speaker}]: ${result.text}`;
+      let transcriptionText: string;
+      
+      // Check if speaker changed
+      if (speaker !== lastSpeaker) {
+        // Speaker changed - add line break and speaker name
+        transcriptionText = `[${speaker}]: ${result.text}`;
+        lastSpeaker = speaker;
+      } else {
+        // Same speaker - just add continuation with dots
+        transcriptionText = `... ${result.text}`;
+      }
       
       updateLiveTranscription(transcriptionText);
       
-      console.log('📝 Transcription added:', transcriptionText);
     };
     
-    // Start transcription without name detection callback
+    // Start transcription
     await transcriptionService.startRecording(
-      handleTranscription,
+      updateTranscription,
       (error) => {
         console.error('Transcription error:', error);
         updateTranscriptionStatus('❌ Transcription error');
       },
-      getCurrentSpeaker
-      // NO handleNameDetection callback - completely separate from avatar
+      getCurrentSpeaker,
+      undefined, // nameDetectionCallback
+      () => isAvatarSpeaking // isAvatarSpeakingCallback
     );
     
     isAutoTranscribing = true;
@@ -593,15 +574,6 @@ async function startContinuousTranscription() {
   } catch (error) {
     console.error('Failed to start continuous transcription:', error);
     updateTranscriptionStatus('❌ Failed to start transcription');
-  }
-}
-
-// Stop continuous transcription
-async function stopContinuousTranscription() {
-  if (transcriptionService && isAutoTranscribing) {
-    console.log('🎤 Stopping continuous transcription');
-    await transcriptionService.stopRecording();
-    isAutoTranscribing = false;
   }
 }
 
@@ -684,19 +656,19 @@ function isTypingInInput(target: EventTarget | null): boolean {
   return element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable;
 }
 
+// wrapper in case we want to clean up the stream in the future.
+async function getCleanSharedAudioStream(): Promise<MediaStream> {
+  return await getSharedAudioStream()
+}
+
 // Get or create shared audio stream
 async function getSharedAudioStream(): Promise<MediaStream> {
   if (!sharedAudioStream) {
-    sharedAudioStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        sampleRate: 16000,
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      }
-    });
-    console.log('🎤 Created shared audio stream for both services');
+    sharedAudioStream = await navigator.mediaDevices.getUserMedia(AUDIO_STREAM_CONFIG);
+    // tell the encoder/transcriber this is voice, not music
+    const [track] = sharedAudioStream.getAudioTracks();
+    try { track.contentHint = 'speech'; } catch {}
+    console.log('Created shared audio stream for both services');
   }
   return sharedAudioStream;
 }
@@ -761,22 +733,12 @@ function updateAvatarListeningIndicator(isListening: boolean) {
   }
 }
 
-// Stop continuous listening
-async function stopContinuousListening() {
-  if (continuousListeningService) {
-    await continuousListeningService.stopListening();
-    continuousListeningService.cleanup();
-    continuousListeningService = null;
-  }
-}
+
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
   if (transcriptionService) {
     transcriptionService.cleanup();
-  }
-  if (continuousListeningService) {
-    continuousListeningService.cleanup();
   }
 });
 
@@ -829,8 +791,6 @@ endButton.addEventListener("click", terminateAvatarSession);
 stopSpeakingButton.addEventListener("click", interruptAvatar);
 speakButton.addEventListener("click", handleSpeak);
 repeatButton.addEventListener("click", handleRepeat);
-startRecordingButton.addEventListener("click", handleStartTranscription);
-stopRecordingButton.addEventListener("click", handleStopTranscription);
 
 // Update live transcription with automatic saving
 function updateLiveTranscription(text: string) {
@@ -847,3 +807,323 @@ function updateLiveTranscription(text: string) {
   }
 
 }
+
+// // Pop-out controls functionality
+// function popOutControls() {
+//   if (isControlsPoppedOut) {
+//     popInControls();
+//     return;
+//   }
+
+//   if (popOutWindow && !popOutWindow.closed) {
+//     popOutWindow.focus();
+//     return;
+//   }
+
+//   // Create pop-out window for controls
+//   popOutWindow = window.open('', 'ControlsWindow', 
+//     'width=800,height=600,resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no'
+//   );
+
+//   if (!popOutWindow) return;
+
+//   // Set up the controls window
+//   popOutWindow.document.write(`
+//     <!DOCTYPE html>
+//     <html>
+//     <head>
+//       <title>Avatar Controls</title>
+//       <style>
+//         body { 
+//           margin: 20px; 
+//           font-family: system-ui, -apple-system, sans-serif;
+//           background: #f5f5f5;
+//         }
+//         section {
+//           background: white;
+//           padding: 20px;
+//           margin: 15px 0;
+//           border-radius: 8px;
+//           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+//         }
+//         button {
+//           margin: 5px;
+//           padding: 10px 15px;
+//           border: none;
+//           border-radius: 6px;
+//           cursor: pointer;
+//           font-size: 14px;
+//         }
+//         input, textarea {
+//           width: 100%;
+//           padding: 10px;
+//           border: 1px solid #ddd;
+//           border-radius: 6px;
+//           margin: 5px 0;
+//         }
+//         textarea {
+//           height: 200px;
+//           resize: vertical;
+//         }
+//       </style>
+//     </head>
+//     <body>
+//       <h2>Avatar Controls</h2>
+//       <div id="controlsContainer"></div>
+//     </body>
+//     </html>
+//   `);
+
+//   // Clone controls to pop-out window
+//   const controlsSection = document.getElementById('controlsSection');
+//   const popOutContainer = popOutWindow.document.getElementById('controlsContainer');
+  
+//   if (controlsSection && popOutContainer) {
+//     // Clone the controls (not move, to avoid breaking functionality)
+//     const clonedControls = controlsSection.cloneNode(true) as HTMLElement;
+//     popOutContainer.appendChild(clonedControls);
+    
+//     // Hide original controls
+//     controlsSection.style.display = 'none';
+//   }
+
+//   // Update button text
+//   popOutButton.textContent = '📥 Pop In Controls';
+//   isControlsPoppedOut = true;
+
+//   // Handle window close
+//   popOutWindow.addEventListener('beforeunload', () => {
+//     popInControls();
+//   });
+// }
+
+
+// function popInControls() {
+//   if (popOutWindow && !popOutWindow.closed) {
+//     popOutWindow.close();
+//   }
+  
+//   // Move elements back to main window
+//   const mainContainer = document.getElementById('avatarContainer');
+//   const avatarVideo = popOutWindow?.document.getElementById('avatarVideo') || document.getElementById('avatarVideo');
+//   const avatarPlaceholder = popOutWindow?.document.getElementById('avatarPlaceholder') || document.getElementById('avatarPlaceholder');
+  
+//   if (mainContainer) {
+//     if (avatarVideo) {
+//       mainContainer.appendChild(avatarVideo);
+//     }
+    
+//     if (avatarPlaceholder) {
+//       mainContainer.appendChild(avatarPlaceholder);
+//     }
+//   }
+
+//   // Update button text
+//   popOutButton.textContent = '↗️';
+//   isControlsPoppedOut = false;
+//   popOutWindow = null;
+// }
+
+// document.addEventListener('DOMContentLoaded', () => {
+//   const popOutBtn = document.getElementById('popOutButton');
+//   const controls = document.getElementById('controlsSection');
+//   if (!popOutBtn || !controls) return;
+
+//   // @ts-ignore
+//   let popup = null;
+//   // placeholder to remember where controls were
+//   const placeholder = document.createComment('controls-section-placeholder');
+
+//   popOutBtn.addEventListener('click', () => {
+//     // already popped out? focus it
+//     // @ts-ignore
+//     if (popup && !popup.closed) {
+//       popup.focus();
+//       return;
+//     }
+
+//     // open a bare popup
+//     popup = window.open('', 'ControlsPopup', 'width=700,height=900,resizable=yes,scrollbars=yes');
+//     if (!popup) {
+//       alert('Please allow pop-ups for this site to pop out controls.');
+//       return;
+//     }
+
+//     // minimal HTML + PicoCSS so styling remains
+//     popup.document.write(`
+//       <!DOCTYPE html>
+//       <html lang="en">
+//       <head>
+//         <meta charset="UTF-8" />
+//         <title>Controls</title>
+//         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+//         <link rel="stylesheet"
+//           href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+//         <style>
+//           body { margin: 16px;width:100%; }
+//           header { display:flex; justify-content: space-between; align-items:center; margin-bottom:12px; }
+//         </style>
+//       </head>
+//       <body>
+//         <header>
+//           <strong>Controls</strong>
+//           <button id="returnBtn">Return to main</button>
+//         </header>
+//       </body>
+//       </html>
+//     `);
+//     popup.document.close();
+
+//     // move the real node (no clone) so all event listeners keep working
+//     controls.replaceWith(placeholder); // remember original spot
+//     const moved = popup.document.adoptNode(controls);
+//     popup.document.body.appendChild(moved);
+
+//     // hide the pop-out button while in popup (optional)
+//     const btnInPopup = popup.document.getElementById('popOutButton');
+//     if (btnInPopup) btnInPopup.style.display = 'none';
+
+//     // handle "return to main"
+//     const returnBtn = popup.document.getElementById('returnBtn');
+//     const returnControls = () => {
+//       //@ts-ignore
+//       if (!popup || popup.closed) return; // already handled
+//       const back = document.adoptNode(moved);
+//       placeholder.replaceWith(back);
+//       popup.close();
+//     };
+//     returnBtn?.addEventListener('click', returnControls);
+
+//     // if user closes the popup window, return controls automatically
+//     popup.addEventListener('beforeunload', () => {
+//       try {
+//         if (moved && placeholder.isConnected) {
+//           const back = document.adoptNode(moved);
+//           placeholder.replaceWith(back);
+//         }
+//       } catch (_) { /* noop */ }
+//     });
+//   });
+// });
+
+// --- pop out controls (TypeScript-safe, simple) ---
+document.addEventListener('DOMContentLoaded', () => {
+  const popOutBtn = document.getElementById('popOutButton') as HTMLButtonElement | null;
+  const controls = document.getElementById('controlsSection') as HTMLElement | null;
+  if (!popOutBtn || !controls) return;
+
+  popOutBtn.addEventListener('click', () => {
+    const popup = window.open('', 'ControlsPopup', 'width=700,height=900,resizable=yes,scrollbars=yes');
+    if (!popup) {
+      alert('please allow pop-ups to pop out controls.');
+      return;
+    }
+
+    // write minimal scaffold
+    popup.document.write(`<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Controls</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+<style> body{ margin:16px } </style>
+</head><body>
+  <div id="popupControls"></div>
+</body></html>`);
+    popup.document.close();
+
+    const mount = popup.document.getElementById('popupControls') as HTMLElement | null;
+    if (!mount) return;
+
+    // make a visual clone (no logic attached)
+    const clone = controls.cloneNode(true) as HTMLElement;
+
+    // remove pop-out button inside the clone (avoid recursion)
+    const cloneBtn = clone.querySelector('#popOutButton') as HTMLElement | null;
+    if (cloneBtn) cloneBtn.remove();
+
+    mount.appendChild(clone);
+
+    // hide original controls so you can share only the video section
+    const prevDisplay = controls.style.display;
+    controls.style.display = 'none';
+
+    // helper: find original element by id (in main window)
+    const findOriginal = (id?: string | null): HTMLElement | null =>
+      id ? (document.getElementById(id) as HTMLElement | null) : null;
+
+    // forward clicks in popup → trigger original handlers
+    mount.addEventListener('click', (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const clickable = target.closest('[id]') as HTMLElement | null;
+      if (!clickable?.id) return;
+
+      const orig = findOriginal(clickable.id);
+      if (!orig) return;
+
+      if (orig.tagName === 'BUTTON') {
+        e.preventDefault();
+        (orig as HTMLButtonElement).click();
+      }
+    });
+
+    // forward input/value changes (text, range, checkbox, radio, select)
+    function forwardValue(src: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
+      const orig = findOriginal(src.id);
+      if (!orig) return;
+
+      // text, range, select
+      if ('value' in orig) {
+        (orig as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value = src.value;
+      }
+      // checkbox / radio
+      if ((src as HTMLInputElement).type === 'checkbox' || (src as HTMLInputElement).type === 'radio') {
+        (orig as HTMLInputElement).checked = (src as HTMLInputElement).checked;
+      }
+
+      // fire events so existing listeners react
+      orig.dispatchEvent(new Event('input', { bubbles: true }));
+      orig.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    mount.addEventListener('input', (e: Event) => {
+      const el = e.target as Element | null;
+      if (!el) return;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+        forwardValue(el as any);
+      }
+    });
+
+    mount.addEventListener('change', (e: Event) => {
+      const el = e.target as Element | null;
+      if (!el) return;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+        forwardValue(el as any);
+      }
+    });
+
+    // one-time initial sync so clone shows current values
+    const inputs = clone.querySelectorAll('input[id], textarea[id], select[id]');
+    inputs.forEach((src) => {
+      const orig = findOriginal((src as HTMLElement).id);
+      if (!orig) return;
+
+      if (src instanceof HTMLInputElement || src instanceof HTMLTextAreaElement || src instanceof HTMLSelectElement) {
+        if ('value' in orig && 'value' in src) {
+          (src as any).value = (orig as any).value;
+        }
+        if (src.type === 'checkbox' || src.type === 'radio') {
+          //@ts-ignore
+          src.checked = (orig as HTMLInputElement).checked;
+        }
+      }
+    });
+
+    // restore original controls when popup closes
+    const restore = () => {
+      controls.style.display = prevDisplay || '';
+    };
+    popup.addEventListener('beforeunload', restore);
+  });
+});

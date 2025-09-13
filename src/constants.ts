@@ -11,8 +11,8 @@ export const TranscriptionStrategy = {
 export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeof TranscriptionStrategy];
 let AVATAR_VOICE_LANGUAGE = "en" // "et"
 let TRANSCRIPTION_LANGUAGE = "et"; // "en"
-let AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public";
-let AVATAR_GENDER = "felame" // "male"
+let AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public"; // default
+let AVATAR_GENDER = "femal" // "male"
 export let AVATAR_HUMAN_NAME = "Anu";
 const AVAILABLE_VOICE_IDS = {
   EE_KERT: "adc699478776486997dcf2f7b1534a89",
@@ -25,7 +25,7 @@ let voiceId;
 if(AVATAR_GENDER === "male"){
   AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public";
   if(AVATAR_VOICE_LANGUAGE == "et") voiceId = AVAILABLE_VOICE_IDS.EE_KERT;
-  else voiceId = AVAILABLE_VOICE_IDS.EN_LEMBIT;
+  else voiceId = "";
 } else {
   AVATARA_SYSTEM_NAME = "Katya_Chair_Sitting_public";
   if(AVATAR_VOICE_LANGUAGE == "et") voiceId = AVAILABLE_VOICE_IDS.EE_ANU;
@@ -39,7 +39,8 @@ export const AVATAR_DEFAULTS = {
   VOICE_RATE: 1.0,
   LANGUAGE: AVATAR_VOICE_LANGUAGE,
   KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
-  VOICE_ID:voiceId
+  VOICE_ID:voiceId,
+  ACTIVITY_IDLE_TIMEOUT: 3600 // Idle timeout in seconds after last activity before closing session. Range 30–3600.
 }
 
 /**
@@ -61,11 +62,11 @@ export const AUDIO_TRANSCRIPTION_DEFAULTS = {
   // Transcription Timing
   CHUNK_DURATION: 1000, // 1 second chunks for faster processing
   MIN_CHUNK_SIZE: 12000, // Reduced minimum size for faster transcription
-  MAX_BATCH_DURATION: 15000, // 10 seconds max before forced processing
+  MAX_BATCH_DURATION: 30000, // 30 seconds max before forced processing
   
   // Silence Detection
-  SILENCE_THRESHOLD: 0.07, // Audio level threshold for silence
-  SILENCE_DURATION: 1000, // 800ms silence detection for batch processing
+  SILENCE_THRESHOLD: 0.5, // Audio level threshold for silence
+  SILENCE_DURATION: 1000, // 1 seconds silence detection for batch processing
   
   // Audio Analysis
   FFT_SIZE: 256,
@@ -132,10 +133,11 @@ export const AVATAR_AUDIO_CONFIG = {
  * Speaker Names - easily changeable in one place
  */
 export const SPEAKER_NAMES = {
-  // KRISTI: 'Kristi',
-  // RAIVO: 'Raivo', 
+  KRISTI: 'Kristi',
+  RAIVO: 'Raivo', 
+  MARKO: 'Marko', 
   RAINA: 'Raina',
-  MODERATOR: 'moderator',
+  MODERATOR: 'Lembit',
   MODE_NAME: 'Kaspar',
   MODERATOR_FULL: 'Moderaator, Kaspar'
 } as const;
@@ -145,8 +147,8 @@ export const SPEAKER_NAMES = {
  */
 export const SPEAKER_OPTIONS = [
   // { id: 'kirsi', label: SPEAKER_NAMES.KRISTI, prefix: `[${SPEAKER_NAMES.KRISTI}]: ` },
-  // { id: 'raivo', label: SPEAKER_NAMES.RAIVO, prefix: `[${SPEAKER_NAMES.RAIVO}]: ` },
-  // { id: 'marko', label: SPEAKER_NAMES.MARKO, prefix: `[${SPEAKER_NAMES.MARKO}]: ` },
+  { id: 'raivo', label: SPEAKER_NAMES.RAIVO, prefix: `[${SPEAKER_NAMES.RAIVO}]: ` },
+  { id: 'marko', label: SPEAKER_NAMES.MARKO, prefix: `[${SPEAKER_NAMES.MARKO}]: ` },
   { id: 'raina', label: SPEAKER_NAMES.RAINA, prefix: `[${SPEAKER_NAMES.RAINA}]: ` },
   { id: 'moderator', label: SPEAKER_NAMES.MODERATOR, prefix: `[${SPEAKER_NAMES.MODERATOR_FULL}]: ` },
 ] as const;
@@ -169,4 +171,21 @@ export const AUDIO_FILE_EXTENSIONS = {
   'audio/webm;codecs=opus': 'audio.webm',
   'audio/ogg': 'audio.ogg'
 } as const;
-export const KNOWLEDGEBASE_BASE = `#Instructions: Your name is ${AVATAR_HUMAN_NAME}, you are a panelist taking part of panel discussion on the topic of digital transformation and AI. You are the newest member of Portata company.  The panel is part of the Telia Digital Hub conference. Panel moderator ${SPEAKER_NAMES.MODE_NAME} will ask you questions, adress him when he asks you by your name ${AVATAR_HUMAN_NAME}. When prompted, form a short opinion based on the transcript of the ongoing panel discussion (if available) and your own knowledge. Keep the answer strictly on topic and around the conference theme (if available). Always reply in ${AVATAR_VOICE_LANGUAGE} language, regardless of prompt language. #Conference theme: Digital Transformation. # Panel Discussion Transcript:"`
+export const KNOWLEDGEBASE_BASE = `
+#Instructions: 
+* Your name is ${AVATAR_HUMAN_NAME}, you are a member of Portata company. 
+* When prompted, form your answer based on the Discussion Transcript (below) and your own knowledge. 
+* The Discussion Transcript (below) includes the speaker name in square bractes ([Speaker Name]: ) before their statement transcript. 
+* If you cannot pronounce something in ${AVATAR_VOICE_LANGUAGE} language, avoid it in your answer.
+* Keep the answer strictly on Topic (below). 
+* Avoid adressing anybody by name.
+* Always reply in ${AVATAR_VOICE_LANGUAGE} language, regardless of prompt language. 
+---
+# Topic
+* You are taking part of a meeting between decision makers at Telia, conference organizer and AI technology company (Portata) representatives. 
+* The meeting is about the upcoming Telia Digital Hub conference.  
+---
+# Discussion Transcript:
+`
+
+// export const KNOWLEDGEBASE_BASE = `#Instructions: Your name is ${AVATAR_HUMAN_NAME}, you are a panelist taking part of panel discussion on the topic of digital transformation and AI. You are the newest member of Portata company.  The panel is part of the Telia Digital Hub conference. Panel moderator ${SPEAKER_NAMES.MODE_NAME} will ask you questions. When prompted, form a short opinion based on the transcript of the ongoing discussion (if available) and your own knowledge. Keep the answer strictly on topic described before. Always reply in ${AVATAR_VOICE_LANGUAGE} language, regardless of prompt language. # Discussion Transcript:"`

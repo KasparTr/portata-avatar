@@ -230,6 +230,10 @@
         70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
         100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
       }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
     </style>
   </head>
 
@@ -238,10 +242,43 @@
       class="container"
       style="display: flex; flex-direction: column; align-items: center"
     >
-      <!-- <h1>Interactive Avatar Demo (Vite + TypeScript)</h1> -->
 
       <!-- Video Section -->
-      <article style="width: fit-content; position: relative;">
+      <article style="width: fit-content; position: relative;" id="avatarContainer">
+        <!-- Loading overlay -->
+        <div id="avatarLoadingOverlay" style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.8);
+          display: none;
+          justify-content: center;
+          align-items: center;
+          border-radius: 12px;
+          z-index: 999;
+        ">
+          <div style="
+            color: white;
+            font-size: 24px;
+            font-weight: 500;
+            text-align: center;
+          ">
+            <div style="margin-bottom: 20px;">
+              <div style="
+                width: 40px;
+                height: 40px;
+                border: 4px solid rgba(255, 255, 255, 0.3);
+                border-top: 4px solid white;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+                margin: 0 auto;
+              "></div>
+            </div>
+            Connecting to Portata...
+          </div>
+        </div>
         <video id="avatarVideo" autoplay playsinline style="display: none;"></video>
         <img id="avatarPlaceholder" src="/avatar.png" alt="Avatar Placeholder" style="
           width: 1280px; 
@@ -253,139 +290,164 @@
       </article>
 
       <!-- Controls Section -->
-      <section>
-        <section role="group">
-          <button id="startSession">Start Session</button>
-          <button id="endSession" disabled>End Session</button>
-          <button id="stopSpeaking" disabled>⏹️ Stop</button>
-        </section>
-
-
-        <!-- Text Input for Avatar -->
-        <section role="group">
-          <input
-            type="text"
-            id="userInput"
-            placeholder="Type something to talk to the avatar..."
-            aria-label="User input"
-          />
-          <button id="speakButton" role="button">Talk</button>
-          <button id="repeatButton" role="button">Repeat</button>
-        </section>
-
-        <!-- Transcription Strategy Selection -->
-        <section>
-          <fieldset>
-            <legend>Transcription Mode</legend>
-            <label>
-              <input type="radio" name="transcriptionStrategy" value="real_time">
-              Real-time (automatic transcription)
-            </label>
-            <label>
-              <input type="radio" name="transcriptionStrategy" value="on_demand" checked>
-              On-demand (transcribe when stopped)
-            </label>
-          </fieldset>
-        </section>
-
+      <div id="controlsSection">
+        <button id="popOutButton" style="
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          background: rgba(0,0,0,0.7);
+          color: white;
+          border: none;
+          border-radius: 6px;
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 12px;
+          z-index: 100;
+        ">📤 Pop Out Controls</button>
         <!-- Speaker Selection (for on-demand mode) -->
         <section id="speakerSelection" style="display: none;">
           <fieldset>
-            <legend>Speaker</legend>
+            <legend>Speakers</legend>
             <div class="speaker-options" id="speakerOptions">
               <!-- Speaker options will be dynamically generated -->
             </div>
           </fieldset>
         </section>
+        <section >
+          <br>
+          <br>
+          <br>
+          <br>
+          <br>
+        </section>
 
-
-        <!-- Audio Sensitivity Meter -->
+        <!-- Controls Section -->
         <section>
-          <fieldset>
-            <legend>Audio Sensitivity Monitor</legend>
-            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-              <label for="sensitivityMeter" style="min-width: 120px;">Microphone Level:</label>
-              <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
-                <div id="sensitivityMeter" style="
-                  width: 100%; 
-                  height: 20px; 
-                  background: linear-gradient(to right, #28a745 0%, #28a745 30%, #ffc107 30%, #ffc107 70%, #dc3545 70%);
-                  border-radius: 10px;
-                  position: relative;
-                  border: 2px solid #ddd;
-                ">
-                  <div id="sensitivityLevel" style="
-                    width: 0%;
-                    height: 100%;
-                    background: rgba(255,255,255,0.8);
-                    border-radius: 8px;
-                    transition: width 0.1s ease;
-                  "></div>
+          <section role="group">
+            <button id="startSession">Start Session</button>
+            <button id="endSession" disabled>End Session</button>
+            <button id="stopSpeaking" disabled>⏹️ Stop</button>
+          </section>
+
+
+          <!-- Text Input for Avatar -->
+          <section role="group">
+            <input
+              type="text"
+              id="userInput"
+              placeholder="Type something to talk to the avatar..."
+              aria-label="User input"
+            />
+            <button id="speakButton" role="button">Talk</button>
+            <button id="repeatButton" role="button">Repeat</button>
+          </section>
+
+          <!-- Transcription Strategy Selection -->
+          <section style="display: none;">
+            <fieldset>
+              <legend>Transcription Mode</legend>
+              <label>
+                <input type="radio" name="transcriptionStrategy" value="real_time">
+                Real-time (automatic transcription)
+              </label>
+              <label>
+                <input type="radio" name="transcriptionStrategy" value="on_demand" checked>
+                On-demand (transcribe when stopped)
+              </label>
+            </fieldset>
+          </section>
+
+          
+
+
+          <!-- Audio Sensitivity Meter -->
+          <section>
+            <fieldset>
+              <legend>Audio Sensitivity Monitor</legend>
+              <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                <label for="sensitivityMeter" style="min-width: 120px;">Microphone Level:</label>
+                <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                  <div id="sensitivityMeter" style="
+                    width: 100%; 
+                    height: 20px; 
+                    background: linear-gradient(to right, #28a745 0%, #28a745 30%, #ffc107 30%, #ffc107 70%, #dc3545 70%);
+                    border-radius: 10px;
+                    position: relative;
+                    border: 2px solid #ddd;
+                  ">
+                    <div id="sensitivityLevel" style="
+                      width: 0%;
+                      height: 100%;
+                      background: rgba(255,255,255,0.8);
+                      border-radius: 8px;
+                      transition: width 0.1s ease;
+                    "></div>
+                  </div>
+                  <span id="sensitivityValue" style="min-width: 50px; font-weight: 600;">0%</span>
                 </div>
-                <span id="sensitivityValue" style="min-width: 50px; font-weight: 600;">0%</span>
               </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 15px;">
-              <label for="silenceThreshold" style="min-width: 120px;">Silence Threshold:</label>
-              <input type="range" id="silenceThreshold" min="0.01" max="0.3" step="0.01" value="0.05" style="flex: 1;">
-              <span id="thresholdValue" style="min-width: 50px; font-weight: 600;">5%</span>
-            </div>
-            <div style="margin-top: 10px;">
-              <div id="continuousListeningStatus" style="
-                padding: 8px 12px;
-                border-radius: 6px;
-                background: #f8f9fa;
-                border: 1px solid #dee2e6;
-                font-size: 14px;
-                color: #495057;
-              ">🎧 Continuous listening: Ready</div>
-            </div>
-          </fieldset>
-        </section>
+              <div style="display: flex; align-items: center; gap: 15px;">
+                <label for="silenceThreshold" style="min-width: 120px;">Silence Threshold:</label>
+                <input type="range" id="silenceThreshold" min="0.01" max="0.95" step="0.01" value="0.05" style="flex: 1;">
+                <span id="thresholdValue" style="min-width: 50px; font-weight: 600;">5%</span>
+              </div>
+              <div style="margin-top: 10px;">
+                <div id="continuousListeningStatus" style="
+                  padding: 8px 12px;
+                  border-radius: 6px;
+                  background: #f8f9fa;
+                  border: 1px solid #dee2e6;
+                  font-size: 14px;
+                  color: #495057;
+                ">🎧 Continuous listening: Ready</div>
+              </div>
+            </fieldset>
+          </section>
 
-        <!-- Transcription Output -->
-        <section>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <label for="transcriptionOutput">Live Transcription:</label>
-            <div style="display: flex; align-items: center; gap: 15px;">
-              <!-- Avatar Listening Indicator -->
-              <div id="avatarListeningIndicator" style="
-                display: flex; 
-                align-items: center; 
-                gap: 8px; 
-                padding: 6px 12px; 
-                border-radius: 20px; 
-                background: #f8f9fa; 
-                border: 2px solid #dee2e6;
-                font-size: 14px;
-                font-weight: 600;
-                transition: all 0.3s ease;
-              ">
-                <div id="avatarListeningLight" style="
-                  width: 12px; 
-                  height: 12px; 
-                  border-radius: 50%; 
-                  background: #6c757d;
+          <!-- Transcription Output -->
+          <section>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <label for="transcriptionOutput">Live Transcription:</label>
+              <div style="display: flex; align-items: center; gap: 15px;">
+                <!-- Avatar Listening Indicator -->
+                <div id="avatarListeningIndicator" style="
+                  display: flex; 
+                  align-items: center; 
+                  gap: 8px; 
+                  padding: 6px 12px; 
+                  border-radius: 20px; 
+                  background: #f8f9fa; 
+                  border: 2px solid #dee2e6;
+                  font-size: 14px;
+                  font-weight: 600;
                   transition: all 0.3s ease;
-                "></div>
-                <span id="avatarListeningText">Avatar: Idle</span>
+                ">
+                  <div id="avatarListeningLight" style="
+                    width: 12px; 
+                    height: 12px; 
+                    border-radius: 50%; 
+                    background: #6c757d;
+                    transition: all 0.3s ease;
+                  "></div>
+                  <span id="avatarListeningText">Avatar: Idle</span>
+                </div>
+                <button id="pauseResumeTranscriptionButton" style="padding: 8px 16px; background: #ffc107; color: #212529; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                  ⏸️ Pause Transcription
+                </button>
               </div>
-              <button id="pauseResumeTranscriptionButton" style="padding: 8px 16px; background: #ffc107; color: #212529; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
-                ⏸️ Pause Transcription
-              </button>
             </div>
-          </div>
-          <textarea
-            id="transcriptionOutput"
-            placeholder="Transcribed text will appear here..."
-            rows="8"
-            style="width: 100%; resize: vertical;"
-          ></textarea>
-          <button id="saveTranscriptionButton" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-            💾 Save Transcription
-          </button>
+            <textarea
+              id="transcriptionOutput"
+              placeholder="Transcribed text will appear here..."
+              rows="8"
+              style="width: 100%; resize: vertical;"
+            ></textarea>
+            <button id="saveTranscriptionButton" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              💾 Save Transcription
+            </button>
+          </section>
         </section>
-      </section>
+      </div>
     </main>
 
     <script type="module" src="/src/main.ts"></script>

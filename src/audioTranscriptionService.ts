@@ -19,6 +19,7 @@ export interface AudioTranscriptionConfig {
   silenceThreshold?: number; // Audio level threshold for silence detection
   silenceDuration?: number; // Duration of silence before triggering transcription
   strategy?: TranscriptionStrategyType; // Transcription strategy
+  audioGatingCallback?: () => boolean; // Callback to check if audio should be processed
 }
 
 export class AudioTranscriptionService {
@@ -40,6 +41,9 @@ export class AudioTranscriptionService {
   private currentSpeaker: string = '';
   private getSpeakerCallback?: () => string;
   private nameDetectionCallback?: (result: TranscriptionResult) => void;
+  private isAvatarSpeakingCallback?: () => boolean;
+  private audioGatingCallback?: () => boolean;
+  private batchHadMeaningfulAudio: boolean = false; // Track if current batch has meaningful audio
 
   constructor(config: AudioTranscriptionConfig) {
     this.config = {
@@ -53,10 +57,13 @@ export class AudioTranscriptionService {
       strategy: TranscriptionStrategy.REAL_TIME,
       ...config
     };
+    this.audioGatingCallback = config.audioGatingCallback;
+
   }
 
   /**
    * Initialize microphone access and prepare for recording
+   * NOT IN USE!
    */
   async initialize(): Promise<void> {
     try {
@@ -172,7 +179,8 @@ export class AudioTranscriptionService {
     onTranscription: (result: TranscriptionResult) => void,
     onError?: (error: Error) => void,
     getSpeaker?: () => string,
-    nameDetectionCallback?: (result: TranscriptionResult) => void
+    nameDetectionCallback?: (result: TranscriptionResult) => void,
+    isAvatarSpeakingCallback?: () => boolean
   ): Promise<void> {
     if (!this.audioStream) {
       throw new Error('Audio service not initialized. Call initialize() first.');
@@ -181,6 +189,8 @@ export class AudioTranscriptionService {
     if (this.isRecording) {
       throw new Error('Recording already in progress');
     }
+
+    this.isAvatarSpeakingCallback = isAvatarSpeakingCallback;
 
     // Recreate MediaRecorder if it's null or in an unusable state
     if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
@@ -212,9 +222,7 @@ export class AudioTranscriptionService {
    * Stop audio recording and trigger transcription
    */
   async stopRecording(): Promise<void> {
-    console.log('🎤 stopRecording called, isRecording:', this.isRecording);
     if (this.mediaRecorder && this.isRecording) {
-      console.log('🎤 Stopping MediaRecorder...');
       this.mediaRecorder.stop();
       this.isRecording = false;
       
@@ -226,8 +234,6 @@ export class AudioTranscriptionService {
         });
       }
       
-      console.log('🎤 MediaRecorder stopped, waiting for onstop event to trigger transcription');
-      // processAccumulatedAudio will be called by onstop event
     } else {
       console.log('🎤 No recording to stop or MediaRecorder not available');
     }
@@ -366,6 +372,8 @@ export class AudioTranscriptionService {
       // Check if sound is above threshold
       if (normalizedLevel > (this.config.silenceThreshold || 0.05)) {
         this.lastSoundTime = now;
+        this.batchHadMeaningfulAudio = true; // Mark batch as having meaningful audio
+
         // Clear any existing silence timer
         if (this.silenceTimer) {
           clearTimeout(this.silenceTimer);
@@ -374,7 +382,7 @@ export class AudioTranscriptionService {
       } else {
         // Check for silence duration
         const silenceDuration = now - this.lastSoundTime;
-        if (silenceDuration > (this.config.silenceDuration || 2000) && !this.silenceTimer && this.currentBuffer.length > 0) {
+        if (silenceDuration > (this.config.silenceDuration || AUDIO_TRANSCRIPTION_DEFAULTS.SILENCE_DURATION) && !this.silenceTimer && this.currentBuffer.length > 0) {
           this.silenceTimer = setTimeout(() => {
             if (this.isRecording && this.currentBuffer.length > 0) {
               console.log('🎤 Silence detected, processing audio batch');
@@ -393,6 +401,8 @@ export class AudioTranscriptionService {
     
     // Start monitoring
     this.lastSoundTime = Date.now();
+    this.batchHadMeaningfulAudio = false; // Reset for new batch
+
     checkAudioLevel();
     
     // Also start max batch timer as backup
@@ -404,7 +414,7 @@ export class AudioTranscriptionService {
     }
     
     this.maxBatchTimer = setTimeout(() => {
-      console.log('🎤 10-second max duration reached, switching buffer');
+      console.log('🎤 15-second max duration reached, switching buffer');
       if (this.isRecording && this.currentBuffer.length > 0) {
         this.switchBuffer();
       }
@@ -433,6 +443,9 @@ export class AudioTranscriptionService {
     console.log('🎤 Switching buffer - stopping MediaRecorder to finalize audio file');
     
     this.isProcessingTranscription = true;
+    
+    // Capture the audio activity state for this batch
+    const batchHadAudio = this.batchHadMeaningfulAudio;
     
     // Stop MediaRecorder to finalize the current audio file
     if (this.mediaRecorder.state === 'recording') {
@@ -468,23 +481,42 @@ export class AudioTranscriptionService {
         if (this.mediaRecorder) {
           this.mediaRecorder.start(AUDIO_TRANSCRIPTION_DEFAULTS.MEDIA_RECORDER_TIMESLICE);
           console.log('🎤 MediaRecorder restarted for continuous recording');
+          // Reset audio activity flag for new batch
+          this.batchHadMeaningfulAudio = false;
         }
       }
     }
     
     this.isProcessingTranscription = false;
     
-    // Process the buffer after releasing the flag
+    // Process the buffer after releasing the flag, passing the audio activity state
     if (this.processingBuffer.length > 0) {
-      this.processBufferAsync();
+      this.processBufferAsync(batchHadAudio);
     }
   }
 
   /**
    * Process buffer asynchronously while recording continues
    */
-  private async processBufferAsync(): Promise<void> {
+  private async processBufferAsync(batchHadAudio: boolean): Promise<void> {
     if (this.isProcessingTranscription || this.processingBuffer.length === 0) {
+      return;
+    }
+    
+    // ADD THIS CHECK HERE
+    if (this.isAvatarSpeakingCallback && this.isAvatarSpeakingCallback()) {
+      console.log('🎯 Skipping transcription - avatar is speaking');
+      this.processingBuffer = [];
+      this.isProcessingTranscription = false;
+      return;
+    }
+
+
+    // Check if batch had meaningful audio during recording
+    if (!batchHadAudio) {
+      console.log('🎤 Audio gating: ❌ Skipping transcription - batch had no meaningful audio during recording');
+      this.processingBuffer = [];
+      this.isProcessingTranscription = false;
       return;
     }
 
@@ -604,5 +636,13 @@ export class AudioTranscriptionService {
    */
   get recording(): boolean {
     return this.isRecording;
+  }
+
+  /**
+   * Update silence threshold dynamically
+   */
+  public updateSilenceThreshold(threshold: number): void {
+    this.config.silenceThreshold = threshold;
+    console.log('🎤 Updated silence threshold to:', threshold);
   }
 }
