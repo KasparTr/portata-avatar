@@ -34,7 +34,7 @@
       }
 
       .speaker-card:hover {
-        border-color: #007bff;
+        border-color: #952cdf;
         background-color: #f0f8ff;
       }
 
@@ -49,8 +49,8 @@
       }
 
       .speaker-card:has(input[type="radio"]:checked) {
-        background-color: #007bff;
-        border-color: #007bff;
+        background-color: #952cdf;
+        border-color: #952cdf;
         color: white;
       }
 
@@ -72,132 +72,7 @@
         border: 2px solid #e0e0e0;
       }
 
-      .lever-control {
-        position: fixed;
-        right: 30px;
-        top: 50%;
-        transform: translateY(-50%);
-        z-index: 1000;
-        background: #ffffff;
-        padding: 25px 20px;
-        border-radius: 20px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-        border: 3px solid #e0e0e0;
-        cursor: move;
-        user-select: none;
-        transition: box-shadow 0.2s ease;
-      }
-
-      .lever-control button {
-        cursor: pointer !important;
-        pointer-events: auto;
-        user-select: auto;
-      }
-
-      .lever-control:hover {
-        box-shadow: 0 12px 40px rgba(0,0,0,0.2);
-      }
-
-      .lever-control.dragging {
-        box-shadow: 0 16px 48px rgba(0,0,0,0.3);
-        transform: scale(1.02);
-        transition: none;
-      }
-
-      .drag-handle {
-        position: absolute;
-        top: 8px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 40px;
-        height: 4px;
-        background: #ccc;
-        border-radius: 2px;
-        cursor: grab;
-      }
-
-      .drag-handle:active {
-        cursor: grabbing;
-      }
-
-      .lever-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 15px;
-      }
-
-      .lever-track {
-        width: 16px;
-        height: 140px;
-        background: #ddd;
-        border-radius: 8px;
-        position: relative;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        border: 2px solid #bbb;
-      }
-
-      .lever-track:hover {
-        background: #ccc;
-        border-color: #007bff;
-        transform: scale(1.05);
-      }
-
-      .lever-handle {
-        width: 40px;
-        height: 40px;
-        background: linear-gradient(135deg, #007bff, #0056b3);
-        border-radius: 50%;
-        position: absolute;
-        left: -12px;
-        top: 15px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        border: 3px solid #ffffff;
-      }
-
-      .lever-handle:hover {
-        background: linear-gradient(135deg, #0056b3, #004085);
-        transform: scale(1.15);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.4);
-      }
-
-      .lever-handle.down {
-        top: 85px;
-      }
-
-      .lever-labels {
-        display: flex;
-        flex-direction: column;
-        gap: 35px;
-        font-size: 14px;
-        font-weight: 600;
-        color: #666;
-        text-align: center;
-        min-width: 80px;
-      }
-
-      .lever-label {
-        padding: 8px 12px;
-        border-radius: 8px;
-        transition: all 0.3s ease;
-        cursor: pointer;
-      }
-
-      .lever-label:hover {
-        background: #f0f8ff;
-        color: #007bff;
-      }
-
-      .lever-label.active {
-        color: #ffffff;
-        background: #007bff;
-        font-weight: 700;
-        box-shadow: 0 2px 8px rgba(0,123,255,0.3);
-      }
-
+   
       .record-button {
         padding: 15px 30px;
         font-size: 18px;
@@ -245,6 +120,7 @@
 
       <!-- Video Section -->
       <article style="width: fit-content; position: relative;" id="avatarContainer">
+
         <!-- Loading overlay -->
         <div id="avatarLoadingOverlay" style="
           position: absolute;
@@ -281,7 +157,7 @@
         </div>
         <video id="avatarVideo" autoplay playsinline style="display: none;"></video>
         <img id="avatarPlaceholder" src="/avatar.png" alt="Avatar Placeholder" style="
-          width: 1280px; 
+          width: 1920px; 
           height: 720px; 
           border-radius: 12px;
           box-shadow: 0 8px 32px rgba(0,0,0,0.1);
@@ -291,19 +167,6 @@
 
       <!-- Controls Section -->
       <div id="controlsSection">
-        <button id="popOutButton" style="
-          position: absolute;
-          top: 10px;
-          right: 10px;
-          background: rgba(0,0,0,0.7);
-          color: white;
-          border: none;
-          border-radius: 6px;
-          padding: 8px 12px;
-          cursor: pointer;
-          font-size: 12px;
-          z-index: 100;
-        ">📤 Pop Out Controls</button>
         <!-- Speaker Selection (for on-demand mode) -->
         <section id="speakerSelection" style="display: none;">
           <fieldset>
@@ -442,7 +305,7 @@
               rows="8"
               style="width: 100%; resize: vertical;"
             ></textarea>
-            <button id="saveTranscriptionButton" style="margin-top: 10px; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            <button id="saveTranscriptionButton" style="margin-top: 10px; padding: 8px 16px; background: #952cdf; color: white; border: none; border-radius: 4px; cursor: pointer;">
               💾 Save Transcription
             </button>
           </section>
