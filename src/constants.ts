@@ -62,7 +62,7 @@ export const AUDIO_TRANSCRIPTION_DEFAULTS = {
   // Transcription Timing
   CHUNK_DURATION: 1000, // 1 second chunks for faster processing
   MIN_CHUNK_SIZE: 12000, // Reduced minimum size for faster transcription
-  MAX_BATCH_DURATION: 30000, // 30 seconds max before forced processing
+  MAX_BATCH_DURATION: 20000, // max seconds before forced processing of a batch
   
   // Silence Detection
   SILENCE_THRESHOLD: 0.5, // Audio level threshold for silence
@@ -180,6 +180,7 @@ export const KNOWLEDGEBASE_BASE = `
 * Keep the answer strictly on Topic (below). 
 * Avoid adressing anybody by name.
 * Always reply in ${AVATAR_VOICE_LANGUAGE} language, regardless of prompt language. 
+* Behave like you would be in an official meeting of panel so avoid any "feel free to ask more", etc quirks.
 ---
 # Topic
 * You are taking part of a meeting between decision makers at Telia, conference organizer and AI technology company (Portata) representatives. 

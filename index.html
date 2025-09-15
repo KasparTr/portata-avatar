@@ -157,13 +157,39 @@
         </div>
         <video id="avatarVideo" autoplay playsinline style="display: none;"></video>
         <img id="avatarPlaceholder" src="/avatar.png" alt="Avatar Placeholder" style="
-          width: 1920px; 
+          width: 1280px; 
           height: 720px; 
           border-radius: 12px;
           box-shadow: 0 8px 32px rgba(0,0,0,0.1);
           object-fit: cover;
         ">
+        <!-- Avatar Listening Indicator -->
+       <div id="avatarListeningIndicator" style="
+       display: flex; 
+       max-width: 200px;
+       margin-top: 10px;
+       align-items: center; 
+       gap: 8px; 
+       padding: 6px 12px; 
+       border-radius: 20px; 
+       background: #f8f9fa; 
+       border: 2px solid #dee2e6;
+       font-size: 14px;
+       font-weight: 600;
+       transition: all 0.3s ease;
+     ">
+       <div id="avatarListeningLight" style="
+         width: 12px; 
+         height: 12px; 
+         border-radius: 50%; 
+         background: #6c757d;
+         transition: all 0.3s ease;
+       "></div>
+       <span id="avatarListeningText">Avatar: Idle</span>
+     </div>
+                       
       </article>
+       
 
       <!-- Controls Section -->
       <div id="controlsSection">
@@ -272,28 +298,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
               <label for="transcriptionOutput">Live Transcription:</label>
               <div style="display: flex; align-items: center; gap: 15px;">
-                <!-- Avatar Listening Indicator -->
-                <div id="avatarListeningIndicator" style="
-                  display: flex; 
-                  align-items: center; 
-                  gap: 8px; 
-                  padding: 6px 12px; 
-                  border-radius: 20px; 
-                  background: #f8f9fa; 
-                  border: 2px solid #dee2e6;
-                  font-size: 14px;
-                  font-weight: 600;
-                  transition: all 0.3s ease;
-                ">
-                  <div id="avatarListeningLight" style="
-                    width: 12px; 
-                    height: 12px; 
-                    border-radius: 50%; 
-                    background: #6c757d;
-                    transition: all 0.3s ease;
-                  "></div>
-                  <span id="avatarListeningText">Avatar: Idle</span>
-                </div>
+
                 <button id="pauseResumeTranscriptionButton" style="padding: 8px 16px; background: #ffc107; color: #212529; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
                   ⏸️ Pause Transcription
                 </button>

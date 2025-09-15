@@ -576,6 +576,7 @@ export class AudioTranscriptionService {
     // Determine file extension based on MIME type
     let filename = AUDIO_FILE_EXTENSIONS[audioBlob.type as keyof typeof AUDIO_FILE_EXTENSIONS] || 'audio.webm';
     
+    formData.append('language_code', AUDIO_TRANSCRIPTION_DEFAULTS.LANGUAGE);
     formData.append('file', audioBlob, filename);
     formData.append('model_id', AUDIO_TRANSCRIPTION_DEFAULTS.MODEL);
     
