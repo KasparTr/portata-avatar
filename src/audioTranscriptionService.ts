@@ -20,6 +20,7 @@ export interface AudioTranscriptionConfig {
   silenceDuration?: number; // Duration of silence before triggering transcription
   strategy?: TranscriptionStrategyType; // Transcription strategy
   audioGatingCallback?: () => boolean; // Callback to check if audio should be processed
+  onAudioCaptured?: (audioBlob: Blob) => void; // Callback when audio blob is captured
 }
 
 export class AudioTranscriptionService {
@@ -43,6 +44,7 @@ export class AudioTranscriptionService {
   private nameDetectionCallback?: (result: TranscriptionResult) => void;
   private isAvatarSpeakingCallback?: () => boolean;
   private audioGatingCallback?: () => boolean;
+  private onAudioCapturedCallback?: (audioBlob: Blob) => void;
   private batchHadMeaningfulAudio: boolean = false; // Track if current batch has meaningful audio
 
   constructor(config: AudioTranscriptionConfig) {
@@ -58,6 +60,7 @@ export class AudioTranscriptionService {
       ...config
     };
     this.audioGatingCallback = config.audioGatingCallback;
+    this.onAudioCapturedCallback = config.onAudioCaptured;
 
   }
 
@@ -526,6 +529,11 @@ export class AudioTranscriptionService {
     try {
       const mimeType = this.mediaRecorder?.mimeType || 'audio/wav';
       const audioBlob = new Blob(this.processingBuffer, { type: mimeType });
+      
+      // Call audio captured callback if provided
+      if (this.onAudioCapturedCallback) {
+        this.onAudioCapturedCallback(audioBlob);
+      }
       
       if (audioBlob.size > (this.config.minChunkSize || AUDIO_TRANSCRIPTION_DEFAULTS.MIN_CHUNK_SIZE)) {
         console.log('🎤 Transcribing buffer:', audioBlob.size, 'bytes');

@@ -7,7 +7,7 @@ import { AudioTranscriptionService, type TranscriptionResult } from "./audioTran
 import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, KNOWLEDGEBASE_BASE } from './constants';
 import type { TranscriptionStrategyType } from './constants';
 import { KnowledgeBaseService } from './knowledgeBaseService';
-import { querySeekerRAG, type SeekerMessage } from './seekerService';
+import { querySeekerRAG, getRelevantContext, type SeekerMessage } from './seekerService';
 
 // DOM elements
 const videoElement = document.getElementById("avatarVideo") as HTMLVideoElement;
@@ -53,6 +53,7 @@ let seekerMessageHistory: SeekerMessage[] = [
   //   content: "Oled nüüd režiimis 'Ehitamisega seotud küsimused'. Režiimi saad muuta menüüst. Seniks esita oma küsimused siia.?"
   // }
 ];
+let capturedAudioBlob: Blob | null = null; // Store captured audio for passing to avatar
 
 // Audio sensitivity and gating
 let audioContext: AudioContext | null = null;
@@ -120,16 +121,16 @@ async function initializeAvatarSession() {
     console.log('🎯 Avatar session created:', !!sessionData);
     
     // Start avatar voice chat session
-    avatar?.muteInputAudio(); // mute by default
-    await avatar.startVoiceChat();
-    setTimeout(() => {
-      console.log('🎯 Avatar voice chat started');
-      // Hide loading overlay.
-      avatar?.muteInputAudio(); // mute by default
-      if (avatarLoadingOverlay) {
-        avatarLoadingOverlay.style.display = 'none';
-      }
-    }, 1000);
+    // avatar?.muteInputAudio(); // mute by default
+    // await avatar.startVoiceChat();
+    // setTimeout(() => {
+    //   console.log('🎯 Avatar voice chat started');
+    //   // Hide loading overlay.
+    //   avatar?.muteInputAudio(); // mute by default
+    //   if (avatarLoadingOverlay) {
+    //     avatarLoadingOverlay.style.display = 'none';
+    //   }
+    // }, 1000);
     
     // Enable start button, keep stop button disabled until avatar speaks
     endButton.disabled = false;
@@ -140,16 +141,20 @@ async function initializeAvatarSession() {
     await getCleanSharedAudioStream();
 
     // --- TRANSCRIPTION ---
-    // // Initialize transcription service (separate from avatar)
-    // console.log('🎤 Initializing transcription service...');
-    // await initializeTranscriptionService();
+    // Initialize transcription service (separate from avatar)
+    console.log('🎤 Initializing transcription service...');
+    await initializeTranscriptionService();
 
-    // // Start continuous transcription (completely separate from avatar)
-    // console.log('🎤 Starting continuous transcription...');
-    // await startContinuousTranscription();
+    // Start continuous transcription (completely separate from avatar)
+    console.log('🎤 Starting continuous transcription...');
+    await startContinuousTranscription();
 
-    // // Add toggle instructions
-    // updateTranscriptionStatus('🎤 Transcription active. Press SPACE to toggle avatar listening.');
+    // Initialize knowledge base service for workflow
+    console.log('📚 Initializing knowledge base service...');
+    knowledgeBaseService = await initializeKnowledgeBaseService();
+    if (!knowledgeBaseService) {
+      console.warn('⚠️ Knowledge base service not initialized - workflow will skip KB updates');
+    }
 
     // --- AUDIO ---
     // Initialize audio sensitivity monitoring
@@ -429,7 +434,12 @@ async function initializeTranscriptionService() {
   transcriptionService = new AudioTranscriptionService({
     apiKey: elevenlabsApiKey,
     strategy: currentStrategy,
-    silenceThreshold: currentSilenceThreshold
+    silenceThreshold: currentSilenceThreshold,
+    onAudioCaptured: (audioBlob: Blob) => {
+      // Store the captured audio blob for passing to avatar
+      capturedAudioBlob = audioBlob;
+      console.log('🎤 Audio blob captured:', audioBlob.size, 'bytes');
+    }
   });
 
   try {
@@ -519,6 +529,57 @@ async function saveTranscriptionToKnowledge() {
   }
 }
 
+/**
+ * Handle voice input workflow:
+ * 1. Capture speech (already done via STT)
+ * 2. Get relevant context from Seeker
+ * 3. Update knowledge base
+ * 4. Unmute avatar and pass audio
+ */
+async function handleVoiceInputWorkflow(transcribedText: string) {
+  try {
+    console.log('🔄 Starting voice input workflow for:', transcribedText);
+    
+    // Step 1: Get relevant context from Seeker RAG
+    console.log('📚 Step 1: Getting relevant context from Seeker...');
+    const context = await getRelevantContext(transcribedText);
+    console.log('✅ Context received:', context.substring(0, 100) + '...');
+    
+    // Step 2: Update knowledge base with the context
+    if (context && knowledgeBaseService) {
+      console.log('📝 Step 2: Updating knowledge base...');
+      await knowledgeBaseService.updateKnowledgeBase(context);
+      console.log('✅ Knowledge base updated');
+    } else {
+      console.warn('⚠️ Skipping knowledge base update - no context or service not initialized');
+    }
+    
+    // Step 3: Send the transcribed text to avatar (with updated knowledge base)
+    console.log('🎤 Step 3: Sending transcribed text to avatar...');
+    if (avatar) {
+      try {
+        // Since we can't replay the audio blob to the avatar's stream,
+        // we send the transcribed text instead. The avatar will respond
+        // based on the updated knowledge base with relevant context.
+        await avatar.speak({
+          text: transcribedText,
+          taskType: TaskType.TALK
+        });
+        
+        console.log('✅ Text sent to avatar - avatar will respond with updated knowledge base');
+      } catch (error) {
+        console.error('❌ Error sending text to avatar:', error);
+      }
+    } else {
+      console.warn('⚠️ Avatar not initialized');
+    }
+    
+    console.log('✅ Voice input workflow completed');
+  } catch (error) {
+    console.error('❌ Error in voice input workflow:', error);
+  }
+}
+
 // Start continuous transcription (separate from avatar)
 async function startContinuousTranscription() {
   if (!transcriptionService) {
@@ -542,12 +603,8 @@ async function startContinuousTranscription() {
     };
     
     // Handle regular transcription results
-    const updateTranscription = (result: TranscriptionResult) => {
+    const updateTranscription = async (result: TranscriptionResult) => {
       if (!result.text || result.text.trim() === '') return;
-      
-      // // Add speaker prefix and display transcription
-      // const speaker = result.speaker || getCurrentSpeaker();
-      // const transcriptionText = `[${speaker}]: ${result.text}`;
       
       const speaker = result.speaker || getCurrentSpeaker();
       let transcriptionText: string;
@@ -564,6 +621,8 @@ async function startContinuousTranscription() {
       
       updateLiveTranscription(transcriptionText);
       
+      // Execute the workflow: STT → getContext → updateKB → pass to avatar
+      await handleVoiceInputWorkflow(result.text);
     };
     
     // Start transcription

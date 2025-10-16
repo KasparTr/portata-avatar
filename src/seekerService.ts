@@ -20,6 +20,15 @@ interface SeekerQueryRequest {
 }
 
 /**
+ * Request body for Seeker context
+ */
+interface SeekerContextRequest {
+  ns: string;
+  token: string;
+  prompt: string;
+}
+
+/**
  * Raw API response from Seeker query
  */
 interface SeekerAPIResponse {
@@ -151,5 +160,57 @@ export async function querySeekerWithNamespace(
     return {
       error: error instanceof Error ? error.message : 'Unknown error occurred'
     };
+  }
+}
+
+/**
+ * Get relevant context from Seeker RAG system
+ * 
+ * @param prompt - The user's speech text to get context for
+ * @returns Promise with the relevant context string
+ * 
+ * @example
+ * ```typescript
+ * const context = await getRelevantContext("What are the building regulations?");
+ * console.log(context);
+ * ```
+ */
+export async function getRelevantContext(prompt: string): Promise<string> {
+  try {
+    // Get token from environment variable
+    const token = import.meta.env.VITE_SEEKER_TOKEN;
+    
+    if (!token) {
+      throw new Error('VITE_SEEKER_TOKEN environment variable is not set');
+    }
+
+    // Prepare request body
+    const requestBody: SeekerContextRequest = {
+      ns: SEEKER_CONFIG.NAMESPACE,
+      token: token,
+      prompt: prompt
+    };
+
+    // Make POST request to Seeker context endpoint
+    const response = await fetch(API_ENDPOINTS.SEEKER_CONTEXT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Seeker context request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    // Return the context string (adjust based on actual API response format)
+    return data.context || data.reply || JSON.stringify(data);
+
+  } catch (error) {
+    console.error('Error getting relevant context from Seeker:', error);
+    return ''; // Return empty string on error
   }
 }

@@ -159,7 +159,8 @@ export const SPEAKER_OPTIONS = [
  */
 export const API_ENDPOINTS = {
   ELEVENLABS_SPEECH_TO_TEXT: 'https://api.elevenlabs.io/v1/speech-to-text',
-  SEEKER_QUERY: 'https://seeker.aveotech.com/query'
+  SEEKER_QUERY: 'https://seeker.aveotech.com/query',
+  SEEKER_CONTEXT: 'https://seeker.aveotech.com/context'
 } as const;
 
 /**
