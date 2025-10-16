@@ -802,7 +802,7 @@ function updateLiveTranscription(text: string) {
     transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
     
     // Auto-save transcription after each update
-    saveTranscriptionToKnowledge();
+    // saveTranscriptionToKnowledge();
   } catch (error) {
     
   }

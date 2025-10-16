@@ -9,7 +9,7 @@ export const TranscriptionStrategy = {
 } as const;
 
 export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeof TranscriptionStrategy];
-let AVATAR_VOICE_LANGUAGE = "en" // "et"
+let AVATAR_VOICE_LANGUAGE = "et" // "et"
 let TRANSCRIPTION_LANGUAGE = "et"; // "en"
 let AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public"; // default
 let AVATAR_GENDER = "femal" // "male"
@@ -38,7 +38,8 @@ export const AVATAR_DEFAULTS = {
   AVATAR_QUALITY: AvatarQuality.High,
   VOICE_RATE: 1.0,
   LANGUAGE: AVATAR_VOICE_LANGUAGE,
-  KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
+  // KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
+  KNOWLEDGE_ID: "7e273b0483b34438a95b11cce31d792e",
   VOICE_ID:voiceId,
   ACTIVITY_IDLE_TIMEOUT: 3600 // Idle timeout in seconds after last activity before closing session. Range 30–3600.
 }
@@ -175,7 +176,7 @@ export const KNOWLEDGEBASE_BASE = `
 #Instructions: 
 * Your name is ${AVATAR_HUMAN_NAME}, you are a member of Portata company. 
 * When prompted, form your answer based on the Discussion Transcript (below) and your own knowledge. 
-* The Discussion Transcript (below) includes the speaker name in square bractes ([Speaker Name]: ) before their statement transcript. 
+* The Discussion Transcript (below) includes the speaker name in square bractes  but please avoid it for now as it is mostl likely false. Just consider the entire context and a mix of participants transcriptions. 
 * If you cannot pronounce something in ${AVATAR_VOICE_LANGUAGE} language, avoid it in your answer.
 * Keep the answer strictly on Topic (below). 
 * Avoid adressing anybody by name.
@@ -189,4 +190,3 @@ export const KNOWLEDGEBASE_BASE = `
 # Discussion Transcript:
 `
 
-// export const KNOWLEDGEBASE_BASE = `#Instructions: Your name is ${AVATAR_HUMAN_NAME}, you are a panelist taking part of panel discussion on the topic of digital transformation and AI. You are the newest member of Portata company.  The panel is part of the Telia Digital Hub conference. Panel moderator ${SPEAKER_NAMES.MODE_NAME} will ask you questions. When prompted, form a short opinion based on the transcript of the ongoing discussion (if available) and your own knowledge. Keep the answer strictly on topic described before. Always reply in ${AVATAR_VOICE_LANGUAGE} language, regardless of prompt language. # Discussion Transcript:"`
