@@ -7,6 +7,7 @@ import { AudioTranscriptionService, type TranscriptionResult } from "./audioTran
 import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, KNOWLEDGEBASE_BASE } from './constants';
 import type { TranscriptionStrategyType } from './constants';
 import { KnowledgeBaseService } from './knowledgeBaseService';
+import { querySeekerRAG, type SeekerMessage } from './seekerService';
 
 // DOM elements
 const videoElement = document.getElementById("avatarVideo") as HTMLVideoElement;
@@ -30,6 +31,8 @@ const avatarListeningIndicator = document.getElementById("avatarListeningIndicat
 const avatarListeningLight = document.getElementById("avatarListeningLight") as HTMLElement;
 const avatarListeningText = document.getElementById("avatarListeningText") as HTMLElement;
 const avatarLoadingOverlay = document.getElementById("avatarLoadingOverlay") as HTMLElement;
+const seekerInput = document.getElementById("seekerInput") as HTMLInputElement;
+const seekerAskButton = document.getElementById("seekerAskButton") as HTMLButtonElement;
 
 let avatar: StreamingAvatar | null = null;
 let sessionData: any = null;
@@ -44,6 +47,12 @@ let isAutoTranscribing: boolean = false; // Separate flag for automatic transcri
 let isAvatarSpeaking: boolean = false;
 let isAvatarListening: boolean = false;
 let knowledgeBaseService: KnowledgeBaseService | null = null;
+let seekerMessageHistory: SeekerMessage[] = [
+  // {
+  //   role: "assistant",
+  //   content: "Oled nüüd režiimis 'Ehitamisega seotud küsimused'. Režiimi saad muuta menüüst. Seniks esita oma küsimused siia.?"
+  // }
+];
 
 // Audio sensitivity and gating
 let audioContext: AudioContext | null = null;
@@ -130,14 +139,19 @@ async function initializeAvatarSession() {
     console.log('🎤 Creating shared audio stream...');
     await getCleanSharedAudioStream();
 
-    // Initialize transcription service (separate from avatar)
-    console.log('🎤 Initializing transcription service...');
-    await initializeTranscriptionService();
+    // --- TRANSCRIPTION ---
+    // // Initialize transcription service (separate from avatar)
+    // console.log('🎤 Initializing transcription service...');
+    // await initializeTranscriptionService();
 
-    // Start continuous transcription (completely separate from avatar)
-    console.log('🎤 Starting continuous transcription...');
-    await startContinuousTranscription();
-    
+    // // Start continuous transcription (completely separate from avatar)
+    // console.log('🎤 Starting continuous transcription...');
+    // await startContinuousTranscription();
+
+    // // Add toggle instructions
+    // updateTranscriptionStatus('🎤 Transcription active. Press SPACE to toggle avatar listening.');
+
+    // --- AUDIO ---
     // Initialize audio sensitivity monitoring
     initializeAudioSensitivityMonitor();
     
@@ -145,9 +159,6 @@ async function initializeAvatarSession() {
     if (sharedAudioStream) {
       startAudioLevelMonitoring(sharedAudioStream);
     }
-    
-    // Add toggle instructions
-    updateTranscriptionStatus('🎤 Transcription active. Press SPACE to toggle avatar listening.');
     
   } catch (error) {
     console.error("Failed to initialize avatar session:", error);
@@ -361,6 +372,15 @@ async function terminateAvatarSession() {
   repeatButton.disabled = false;
 }
 
+async function handleSeekerReply(reply?: string) {
+  if (avatar && reply) {
+    await avatar.speak({
+      text: reply,
+      taskType: TaskType.REPEAT
+    });
+  }
+}
+
 // Handle speaking event
 async function handleSpeak() {
   if (avatar && userInput.value) {
@@ -376,9 +396,6 @@ async function handleSpeak() {
       const separator = currentText ? '\n\n' : '';
       updateLiveTranscription(`${separator}${avatarTranscription}`);
     }
-    
-    // Keep the text in input field for user to see and potentially edit
-    // userInput.value = ""; // Don't clear input after speaking
   }
 }
 
@@ -713,7 +730,7 @@ function updateAvatarListeningIndicator(isListening: boolean) {
     // Red light when listening
     avatarListeningLight.style.background = '#dc3545';
     avatarListeningLight.style.boxShadow = '0 0 10px rgba(220, 53, 69, 0.6)';
-    avatarListeningText.textContent = 'Avatar: Listening';
+    avatarListeningText.textContent = 'Listening';
     avatarListeningIndicator.style.background = '#f8d7da';
     avatarListeningIndicator.style.borderColor = '#f5c6cb';
     avatarListeningIndicator.style.color = '#721c24';
@@ -724,7 +741,7 @@ function updateAvatarListeningIndicator(isListening: boolean) {
     // Gray light when idle
     avatarListeningLight.style.background = '#6c757d';
     avatarListeningLight.style.boxShadow = 'none';
-    avatarListeningText.textContent = 'Avatar: Idle';
+    avatarListeningText.textContent = 'Idle';
     avatarListeningIndicator.style.background = '#f8f9fa';
     avatarListeningIndicator.style.borderColor = '#dee2e6';
     avatarListeningIndicator.style.color = '#495057';
@@ -779,6 +796,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Save transcription button event listener
   saveTranscriptionButton.addEventListener("click", saveTranscriptionToKnowledge);
   
+  // Seeker chatbox event listeners
+  seekerAskButton.addEventListener("click", handleSeekerAsk);
+  seekerInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      handleSeekerAsk();
+    }
+  });
+  
   // Initialize drag functionality
   
   // Initialize UI state
@@ -807,5 +832,62 @@ function updateLiveTranscription(text: string) {
     
   }
 
+}
+
+// Handle Seeker RAG query
+async function handleSeekerAsk() {
+  const question = seekerInput.value.trim();
+  
+  if (!question) {
+    console.warn('⚠️ Seeker: No question provided');
+    return;
+  }
+  
+  console.log('🔍 System: History:', seekerMessageHistory);
+  console.log('🔍 User: Asking question:', question);
+  
+  // Disable button while processing
+  seekerAskButton.disabled = true;
+  seekerAskButton.textContent = 'Küsin...';
+  
+  try {
+   
+    // Query Seeker RAG
+    const response = await querySeekerRAG(question, seekerMessageHistory);
+    
+    if (response.error) {
+      console.error('❌ Seeker error:', response.error);
+      alert(`Seeker error: ${response.error}`);
+    } else {
+      // Log the response to console
+      console.log('✅ Seeker response:', response.reply);
+      handleSeekerReply(response.reply);
+      
+      // Update history
+      if (response.reply) {
+        // Add user message to history
+        seekerMessageHistory.push({
+          role: 'user',
+          content: question
+        });
+        
+        // Add assistant response to history
+        seekerMessageHistory.push({
+          role: 'assistant',
+          content: response.reply
+        });
+      }
+      
+      // Clear input
+      seekerInput.value = '';
+    }
+  } catch (error) {
+    console.error('❌ Seeker request failed:', error);
+    alert('Failed to query Seeker. Check console for details.');
+  } finally {
+    // Re-enable button
+    seekerAskButton.disabled = false;
+    seekerAskButton.textContent = 'Küsi';
+  }
 }
 

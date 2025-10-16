@@ -1,7 +1,4 @@
-# portata-avatar
-
-
-# TODO
-1. detect speaker change and stop/start transction
-2. detect who is speaking.
-3. Add Alice response automatically to the knowledgebase.
+# Wenture AI Avatar Demo
+## branching
+feature/broken-end has working avatar.
+feature/maru has avatar connected to seeker.

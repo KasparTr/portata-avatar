@@ -38,8 +38,8 @@ export const AVATAR_DEFAULTS = {
   AVATAR_QUALITY: AvatarQuality.High,
   VOICE_RATE: 1.0,
   LANGUAGE: AVATAR_VOICE_LANGUAGE,
-  // KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
-  KNOWLEDGE_ID: "7e273b0483b34438a95b11cce31d792e",
+  KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
+  // KNOWLEDGE_ID: "7e273b0483b34438a95b11cce31d792e",
   VOICE_ID:voiceId,
   ACTIVITY_IDLE_TIMEOUT: 3600 // Idle timeout in seconds after last activity before closing session. Range 30–3600.
 }
@@ -158,7 +158,16 @@ export const SPEAKER_OPTIONS = [
  * API Endpoints
  */
 export const API_ENDPOINTS = {
-  ELEVENLABS_SPEECH_TO_TEXT: 'https://api.elevenlabs.io/v1/speech-to-text'
+  ELEVENLABS_SPEECH_TO_TEXT: 'https://api.elevenlabs.io/v1/speech-to-text',
+  SEEKER_QUERY: 'https://seeker.aveotech.com/query'
+} as const;
+
+/**
+ * Seeker RAG System Configuration
+ */
+export const SEEKER_CONFIG = {
+  NAMESPACE: 'ehr', // Update this with your actual namespace
+  ROLE: 'Customer support'
 } as const;
 
 /**
@@ -172,21 +181,18 @@ export const AUDIO_FILE_EXTENSIONS = {
   'audio/webm;codecs=opus': 'audio.webm',
   'audio/ogg': 'audio.ogg'
 } as const;
+
 export const KNOWLEDGEBASE_BASE = `
 #Instructions: 
-* Your name is ${AVATAR_HUMAN_NAME}, you are a member of Portata company. 
-* When prompted, form your answer based on the Discussion Transcript (below) and your own knowledge. 
-* The Discussion Transcript (below) includes the speaker name in square bractes  but please avoid it for now as it is mostl likely false. Just consider the entire context and a mix of participants transcriptions. 
+* Your name is ${AVATAR_HUMAN_NAME}, you are a representative of MARU - Estonian Land and Spacial Agency. 
+* Avoid chancellery language. 
 * If you cannot pronounce something in ${AVATAR_VOICE_LANGUAGE} language, avoid it in your answer.
 * Keep the answer strictly on Topic (below). 
 * Avoid adressing anybody by name.
 * Always reply in ${AVATAR_VOICE_LANGUAGE} language, regardless of prompt language. 
-* Behave like you would be in an official meeting of panel so avoid any "feel free to ask more", etc quirks.
+* Behave like you would be in an official meeting and avoid "feel free to ask more", etc quirks.
 ---
 # Topic
-* You are taking part of a meeting between decision makers at Telia, conference organizer and AI technology company (Portata) representatives. 
-* The meeting is about the upcoming Telia Digital Hub conference.  
----
-# Discussion Transcript:
+* You are taking part of a meeting between high level officials who are presented MARUs AI capabilities. 
+* The meeting is about MARU and use of AI.  
 `
-
