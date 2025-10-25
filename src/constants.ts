@@ -9,7 +9,7 @@ export const TranscriptionStrategy = {
 } as const;
 
 export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeof TranscriptionStrategy];
-let AVATAR_VOICE_LANGUAGE = "et" // "et"
+let AVATAR_VOICE_LANGUAGE = "en" // "et", "lv", "en"
 let TRANSCRIPTION_LANGUAGE = "et"; // "en"
 let AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public"; // default
 let AVATAR_GENDER = "femal" // "male"
@@ -18,17 +18,21 @@ const AVAILABLE_VOICE_IDS = {
   EE_KERT: "adc699478776486997dcf2f7b1534a89",
   EE_ANU: "088b81175b7b4dcabc7179a94467dd06",
   EN_LEMBIT:"dcbce63bc1114c8fa9155bb6538d6edb",
-  EN_IVY:"cef3bc4e0a84424cafcde6f2cf466c97"
+  EN_IVY:"cef3bc4e0a84424cafcde6f2cf466c97",
+  LV_EVERITA: "583838e570fe4e00b646082785c12260",
+  LV_TOMASS: "583838e570fe4e00b646082785c12260"
 }
 
 let voiceId;
 if(AVATAR_GENDER === "male"){
   AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public";
   if(AVATAR_VOICE_LANGUAGE == "et") voiceId = AVAILABLE_VOICE_IDS.EE_KERT;
+  else if(AVATAR_VOICE_LANGUAGE == "lv") voiceId = AVAILABLE_VOICE_IDS.LV_TOMASS;
   else voiceId = "";
 } else {
   AVATARA_SYSTEM_NAME = "Katya_Chair_Sitting_public";
   if(AVATAR_VOICE_LANGUAGE == "et") voiceId = AVAILABLE_VOICE_IDS.EE_ANU;
+  else if(AVATAR_VOICE_LANGUAGE == "lv") voiceId = AVAILABLE_VOICE_IDS.LV_EVERITA;
   else voiceId = AVAILABLE_VOICE_IDS.EN_IVY;
 }
   
@@ -38,9 +42,11 @@ export const AVATAR_DEFAULTS = {
   AVATAR_QUALITY: AvatarQuality.High,
   VOICE_RATE: 1.0,
   LANGUAGE: AVATAR_VOICE_LANGUAGE,
-  KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
-  // KNOWLEDGE_ID: "7e273b0483b34438a95b11cce31d792e",
-  VOICE_ID:voiceId,
+  // KNOWLEDGE_ID: "2b705aff1a834f5c93698641bd29fe5c",
+  KNOWLEDGE_ID: "b4df7e6a975d403099043769e0b86215", // 7b10a64ca5154b96aaaf3409df206ccf
+  // KNOWLEDGE_ID: "7e273b0483b34438a95b11cce31d792e", ""
+  // VOICE_ID:voiceId,
+  VOICE_ID:'cef3bc4e0a84424cafcde6f2cf466c97',
   ACTIVITY_IDLE_TIMEOUT: 3600 // Idle timeout in seconds after last activity before closing session. Range 30–3600.
 }
 
