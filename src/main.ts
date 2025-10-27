@@ -3,8 +3,8 @@ import StreamingAvatar, {
   StreamingEvents,
   TaskType
 } from "@heygen/streaming-avatar";
-import { AudioTranscriptionService, type TranscriptionResult } from "./audioTranscriptionService";
-import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, KNOWLEDGEBASE_BASE } from './constants';
+import { AudioTranscriptionService, } from "./audioTranscriptionService";
+import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, API_ENDPOINTS } from './constants';
 import type { TranscriptionStrategyType } from './constants';
 import { KnowledgeBaseService } from './knowledgeBaseService';
 import { querySeekerRAG, type SeekerMessage } from './seekerService';
@@ -40,8 +40,8 @@ let transcriptionService: AudioTranscriptionService | null = null;
 let currentStrategy: TranscriptionStrategyType = TranscriptionStrategy.ON_DEMAND;
 let currentSpeaker: string = SPEAKER_OPTIONS[0].id;
 let previousSpeaker: string = SPEAKER_OPTIONS[0].id;
-let lockedSpeaker: string = SPEAKER_OPTIONS[0].id; // Speaker locked at recording stop time
-let entireTranscript: string = "";
+// let lockedSpeaker: string = SPEAKER_OPTIONS[0].id; // Speaker locked at recording stop time
+// let entireTranscript: string = "";
 // Removed recordingMode - unified button is now avatar-only
 let isAutoTranscribing: boolean = false; // Separate flag for automatic transcription
 let isAvatarSpeaking: boolean = false;
@@ -58,13 +58,13 @@ let seekerMessageHistory: SeekerMessage[] = [
 let audioContext: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 let currentSilenceThreshold: number = 0.15; // Increased from 0.05 to 0.15 (15%)
-let isSoundAboveThreshold: boolean = false;
+// let isSoundAboveThreshold: boolean = false;
 
 // Knowledge Base
-let knowledgeBaseLatest: string = "";
+// let knowledgeBaseLatest: string = "";
 
 // Global variable to track last speaker
-let lastSpeaker: string = '';
+// let lastSpeaker: string = '';
 
 // #####################
 // #### AUDIO PICKUP ###
@@ -85,16 +85,15 @@ const AUDIO_STREAM_CONFIG: MediaStreamConstraints = {
 let sharedAudioStream: MediaStream | null = null;
 
 
-// Helper function to fetch access token
+// Helper function to fetch access token via backend proxy
 async function fetchAccessToken(): Promise<string> {
-  const apiKey = import.meta.env.VITE_HEYGEN_API_KEY;
-  const response = await fetch(
-    "https://api.heygen.com/v1/streaming.create_token",
-    {
-      method: "POST",
-      headers: { "x-api-key": apiKey },
-    }
-  );
+  const response = await fetch(API_ENDPOINTS.HEYGEN_TOKEN, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch token: ${response.status}`);
+  }
 
   const { data } = await response.json();
   return data.token;
@@ -276,7 +275,7 @@ function startAudioLevelMonitoring(stream: MediaStream) {
       
       // Update status based on threshold
       let isAboveThreshold = normalizedLevel > currentSilenceThreshold;
-      isSoundAboveThreshold = isAboveThreshold;
+      // isSoundAboveThreshold = isAboveThreshold;
       if (continuousListeningStatus) {
         if (isAboveThreshold) {
           // startContinuousTranscription();
@@ -411,37 +410,31 @@ async function handleRepeat() {
 }
 
 // Initialize continuous transcription service
-async function initializeTranscriptionService() {
-  const elevenlabsApiKey = import.meta.env.VITE_ELEVENLABS_API_KEY;
-  
-  console.log('🎤 Initializing transcription service...');
-  
-  if (!elevenlabsApiKey) {
-    console.error('ElevenLabs API key not found in environment variables');
-    return;
-  }
+// async function initializeTranscriptionService() {
+//   console.log('🎤 Initializing transcription service...');
 
-  if (!AudioTranscriptionService.isSupported()) {
-    console.error('Audio transcription not supported in this browser');
-    return;
-  }
+//   if (!AudioTranscriptionService.isSupported()) {
+//     console.error('Audio transcription not supported in this browser');
+//     return;
+//   }
 
-  transcriptionService = new AudioTranscriptionService({
-    apiKey: elevenlabsApiKey,
-    strategy: currentStrategy,
-    silenceThreshold: currentSilenceThreshold
-  });
+//   // API key is no longer needed on the client side - backend proxy handles it
+//   transcriptionService = new AudioTranscriptionService({
+//     apiKey: '', // Empty - backend proxy will use server-side key
+//     strategy: currentStrategy,
+//     silenceThreshold: currentSilenceThreshold
+//   });
 
-  try {
-    // Use shared audio stream to avoid microphone conflicts
-    const audioStream = await getCleanSharedAudioStream();
-    await transcriptionService.initializeWithStream(audioStream);
-    console.log('✅ Transcription service initialized');
-  } catch (error) {
-    console.error('❌ Failed to initialize transcription service:', error);
-    transcriptionService = null;
-  }
-}
+//   try {
+//     // Use shared audio stream to avoid microphone conflicts
+//     const audioStream = await getCleanSharedAudioStream();
+//     await transcriptionService.initializeWithStream(audioStream);
+//     console.log('✅ Transcription service initialized');
+//   } catch (error) {
+//     console.error('❌ Failed to initialize transcription service:', error);
+//     transcriptionService = null;
+//   }
+// }
 
 
 // Stop continuous transcription
@@ -456,26 +449,17 @@ async function stopContinuousTranscription() {
 
 // Initialize knowledge base service
 async function initializeKnowledgeBaseService(): Promise<KnowledgeBaseService | null> {
-  const heygenApiKey = import.meta.env.VITE_HEYGEN_API_KEY;
-  
-  if (!heygenApiKey) {
-    console.error('HeyGen API key not found in environment variables');
-    return null;
-  }
-
-  const service = new KnowledgeBaseService({
-    apiKey: heygenApiKey,
-    knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID
-  });
-
-  return service;
+  // Note: If KnowledgeBaseService makes direct API calls, it also needs to be proxied
+  // For now, we'll return null or update the service to use proxied endpoints
+  console.warn('KnowledgeBaseService needs backend proxy implementation');
+  return null;
 }
 
 // Save transcription function with knowledge base integration
 async function saveTranscriptionToKnowledge() {
   try {
     const transcriptionText = transcriptionOutput.value.trim();
-    knowledgeBaseLatest = KNOWLEDGEBASE_BASE + transcriptionText // not in use.
+    // knowledgeBaseLatest = KNOWLEDGEBASE_BASE + transcriptionText // not in use.
     
     if (!transcriptionText) return;
 
@@ -519,81 +503,81 @@ async function saveTranscriptionToKnowledge() {
   }
 }
 
-// Start continuous transcription (separate from avatar)
-async function startContinuousTranscription() {
-  if (!transcriptionService) {
-    console.error('Transcription service not initialized');
-    return;
-  }
+// // Start continuous transcription (separate from avatar)
+// async function startContinuousTranscription() {
+//   if (!transcriptionService) {
+//     console.error('Transcription service not initialized');
+//     return;
+//   }
 
-  try {
-    console.log('🎤 Starting continuous transcription...');
+//   try {
+//     console.log('🎤 Starting continuous transcription...');
 
-    // Get current speaker for transcription attribution
-    const getCurrentSpeaker = () => {
-      // Check for selected speaker option (radio button or similar)
-      const selectedSpeaker = document.querySelector('input[name="speaker"]:checked') as HTMLInputElement;
-      if (selectedSpeaker) {
-        return selectedSpeaker.value;
-      }
+//     // Get current speaker for transcription attribution
+//     const getCurrentSpeaker = () => {
+//       // Check for selected speaker option (radio button or similar)
+//       const selectedSpeaker = document.querySelector('input[name="speaker"]:checked') as HTMLInputElement;
+//       if (selectedSpeaker) {
+//         return selectedSpeaker.value;
+//       }
       
-      // Fallback to a default speaker
-      return 'Panelist';
-    };
+//       // Fallback to a default speaker
+//       return 'Panelist';
+//     };
     
-    // Handle regular transcription results
-    const updateTranscription = (result: TranscriptionResult) => {
-      if (!result.text || result.text.trim() === '') return;
+//     // Handle regular transcription results
+//     const updateTranscription = (result: TranscriptionResult) => {
+//       if (!result.text || result.text.trim() === '') return;
       
-      // // Add speaker prefix and display transcription
-      // const speaker = result.speaker || getCurrentSpeaker();
-      // const transcriptionText = `[${speaker}]: ${result.text}`;
+//       // // Add speaker prefix and display transcription
+//       // const speaker = result.speaker || getCurrentSpeaker();
+//       // const transcriptionText = `[${speaker}]: ${result.text}`;
       
-      const speaker = result.speaker || getCurrentSpeaker();
-      let transcriptionText: string;
+//       const speaker = result.speaker || getCurrentSpeaker();
+//       let transcriptionText: string;
       
-      // Check if speaker changed
-      if (speaker !== lastSpeaker) {
-        // Speaker changed - add line break and speaker name
-        transcriptionText = `[${speaker}]: ${result.text}`;
-        lastSpeaker = speaker;
-      } else {
-        // Same speaker - just add continuation with dots
-        transcriptionText = `... ${result.text}`;
-      }
+//       // Check if speaker changed
+//       if (speaker !== lastSpeaker) {
+//         // Speaker changed - add line break and speaker name
+//         transcriptionText = `[${speaker}]: ${result.text}`;
+//         lastSpeaker = speaker;
+//       } else {
+//         // Same speaker - just add continuation with dots
+//         transcriptionText = `... ${result.text}`;
+//       }
       
-      updateLiveTranscription(transcriptionText);
+//       updateLiveTranscription(transcriptionText);
       
-    };
+//     };
     
-    // Start transcription
-    await transcriptionService.startRecording(
-      updateTranscription,
-      (error) => {
-        console.error('Transcription error:', error);
-        updateTranscriptionStatus('❌ Transcription error');
-      },
-      getCurrentSpeaker,
-      undefined, // nameDetectionCallback
-      () => isAvatarSpeaking // isAvatarSpeakingCallback
-    );
+//     // Start transcription
+//     await transcriptionService.startRecording(
+//       updateTranscription,
+//       (error) => {
+//         console.error('Transcription error:', error);
+//         updateTranscriptionStatus('❌ Transcription error');
+//       },
+//       getCurrentSpeaker,
+//       undefined, // nameDetectionCallback
+//       () => isAvatarSpeaking // isAvatarSpeakingCallback
+//     );
     
-    isAutoTranscribing = true;
-    updateTranscriptionStatus('🎤 Transcription active');
+//     isAutoTranscribing = true;
+//     updateTranscriptionStatus('🎤 Transcription active');
     
-    // Update pause/resume button
-    const pauseResumeBtn = document.getElementById('pauseResumeTranscription') as HTMLButtonElement;
-    if (pauseResumeBtn) {
-      pauseResumeBtn.textContent = '⏸️ Pause Transcription';
-      pauseResumeBtn.disabled = false;
-    }
+//     // Update pause/resume button
+//     const pauseResumeBtn = document.getElementById('pauseResumeTranscription') as HTMLButtonElement;
+//     if (pauseResumeBtn) {
+//       pauseResumeBtn.textContent = '⏸️ Pause Transcription';
+//       pauseResumeBtn.disabled = false;
+//     }
     
-    console.log('✅ Continuous transcription started successfully');
-  } catch (error) {
-    console.error('Failed to start continuous transcription:', error);
-    updateTranscriptionStatus('❌ Failed to start transcription');
-  }
-}
+//     console.log('✅ Continuous transcription started successfully');
+//   } catch (error) {
+//     console.error('Failed to start continuous transcription:', error);
+//     updateTranscriptionStatus('❌ Failed to start transcription');
+//   }
+// }
 
 // Handle transcription strategy change
 function handleStrategyChange() {

@@ -1,6 +1,5 @@
 import { AVATAR_AUDIO_CONFIG, API_ENDPOINTS, AUDIO_FILE_EXTENSIONS } from './constants';
 import type { TranscriptionResult } from './audioTranscriptionService';
-import { interruptAvatar } from './main';
 
 export interface ContinuousListeningConfig {
   apiKey: string;
@@ -27,7 +26,6 @@ export class ContinuousListeningService {
   private lastSoundTime = 0;
   private processingTimeout: NodeJS.Timeout | null = null;
   private isAvatarSpeaking = false;
-  private voiceActivityThreshold = 0.15; // Higher threshold for human voice detection
   private dedicatedAudioStream: MediaStream | null = null; // Separate stream for Anu listening
   private currentSilenceThreshold: number = AVATAR_AUDIO_CONFIG.SILENCE_THRESHOLD; // Configurable threshold
 

@@ -8,16 +8,6 @@ export interface SeekerMessage {
   content: string;
 }
 
-/**
- * Request body for Seeker query
- */
-interface SeekerQueryRequest {
-  ns: string;
-  token: string;
-  prompt: string;
-  role: string;
-  msgHistory: SeekerMessage[];
-}
 
 /**
  * Raw API response from Seeker query
@@ -58,23 +48,15 @@ export async function querySeekerRAG(
   ]
 ): Promise<SeekerQueryResponse> {
   try {
-    // Get token from environment variable
-    const token = import.meta.env.VITE_SEEKER_TOKEN;
-    
-    if (!token) {
-      throw new Error('VITE_SEEKER_TOKEN environment variable is not set');
-    }
-
-    // Prepare request body
-    const requestBody: SeekerQueryRequest = {
-      ns: SEEKER_CONFIG.NAMESPACE,
-      token: token,
+    // Prepare request body for backend proxy
+    const requestBody = {
       prompt: prompt,
-      role: SEEKER_CONFIG.ROLE,
-      msgHistory: msgHistory
+      msgHistory: msgHistory,
+      namespace: SEEKER_CONFIG.NAMESPACE,
+      role: SEEKER_CONFIG.ROLE
     };
 
-    // Make POST request to Seeker
+    // Make POST request to backend proxy (no token needed on client side)
     const response = await fetch(API_ENDPOINTS.SEEKER_QUERY, {
       method: 'POST',
       headers: {
@@ -84,7 +66,7 @@ export async function querySeekerRAG(
     });
 
     if (!response.ok) {
-      throw new Error(`Seeker API request failed: ${response.status} ${response.statusText}`);
+      throw new Error(`Backend proxy request failed: ${response.status} ${response.statusText}`);
     }
 
     const data: SeekerAPIResponse = await response.json();
@@ -112,23 +94,16 @@ export async function querySeekerWithNamespace(
   msgHistory?: SeekerMessage[]
 ): Promise<SeekerQueryResponse> {
   try {
-    const token = import.meta.env.VITE_SEEKER_TOKEN;
-    
-    if (!token) {
-      throw new Error('VITE_SEEKER_TOKEN environment variable is not set');
-    }
-
-    const requestBody: SeekerQueryRequest = {
-      ns: namespace,
-      token: token,
+    const requestBody = {
       prompt: prompt,
-      role: SEEKER_CONFIG.ROLE,
       msgHistory: msgHistory || [
         {
           role: "assistant",
           content: "Oled nüüd režiimis 'Ehitamisega seotud küsimused'. Režiimi saad muuta menüüst. Seniks esita oma küsimused siia.?"
         }
-      ]
+      ],
+      namespace: namespace,
+      role: SEEKER_CONFIG.ROLE
     };
 
     const response = await fetch(API_ENDPOINTS.SEEKER_QUERY, {
@@ -140,7 +115,7 @@ export async function querySeekerWithNamespace(
     });
 
     if (!response.ok) {
-      throw new Error(`Seeker API request failed: ${response.status} ${response.statusText}`);
+      throw new Error(`Backend proxy request failed: ${response.status} ${response.statusText}`);
     }
 
     const data: SeekerAPIResponse = await response.json();

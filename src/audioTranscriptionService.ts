@@ -36,13 +36,11 @@ export class AudioTranscriptionService {
   private maxBatchTimer: NodeJS.Timeout | null = null;
   private audioAnalyzer: AnalyserNode | null = null;
   private audioContext: AudioContext | null = null;
-  private batchStartTime: number = 0;
   private isProcessingTranscription: boolean = false;
   private currentSpeaker: string = '';
   private getSpeakerCallback?: () => string;
   private nameDetectionCallback?: (result: TranscriptionResult) => void;
   private isAvatarSpeakingCallback?: () => boolean;
-  private audioGatingCallback?: () => boolean;
   private batchHadMeaningfulAudio: boolean = false; // Track if current batch has meaningful audio
 
   constructor(config: AudioTranscriptionConfig) {
@@ -57,7 +55,7 @@ export class AudioTranscriptionService {
       strategy: TranscriptionStrategy.REAL_TIME,
       ...config
     };
-    this.audioGatingCallback = config.audioGatingCallback;
+    // this.audioGatingCallback = config.audioGatingCallback;
 
   }
 
@@ -570,43 +568,41 @@ export class AudioTranscriptionService {
 
   private async transcribeAudio(audioBlob: Blob): Promise<TranscriptionResult> {
     console.log('Starting transcription for blob of size:', audioBlob.size, 'type:', audioBlob.type);
-    
+
     const formData = new FormData();
-    
+
     // Determine file extension based on MIME type
     let filename = AUDIO_FILE_EXTENSIONS[audioBlob.type as keyof typeof AUDIO_FILE_EXTENSIONS] || 'audio.webm';
-    
+
     formData.append('language_code', AUDIO_TRANSCRIPTION_DEFAULTS.LANGUAGE);
     formData.append('file', audioBlob, filename);
     formData.append('model_id', AUDIO_TRANSCRIPTION_DEFAULTS.MODEL);
-    
+
     // Only add diarize if it's true (boolean, not JSON string)
     if (AUDIO_TRANSCRIPTION_DEFAULTS.DIARIZE) {
       formData.append('diarize', 'true');
     }
 
-    console.log('Sending transcription request to ElevenLabs API with filename:', filename);
-    
+    console.log('Sending transcription request to backend proxy with filename:', filename);
+
     try {
+      // Use backend proxy instead of direct API call
       const response = await fetch(API_ENDPOINTS.ELEVENLABS_SPEECH_TO_TEXT, {
         method: 'POST',
-        headers: {
-          'xi-api-key': this.config.apiKey
-        },
         body: formData
       });
-      
+
       console.log('API Response:', response);
-    
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API Error response:', errorText);
-        throw new Error(`Transcription failed: Error: ElevenLabs API error: ${response.status} - ${errorText}`);
+        throw new Error(`Transcription failed: Error: Backend proxy error: ${response.status} - ${errorText}`);
       }
-      
+
       const result = await response.json();
       console.log('Transcription API result:', result);
-      
+
       return {
         text: result.text || '',
         confidence: result.confidence,

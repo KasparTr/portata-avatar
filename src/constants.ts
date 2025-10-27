@@ -9,10 +9,10 @@ export const TranscriptionStrategy = {
 } as const;
 
 export type TranscriptionStrategyType = typeof TranscriptionStrategy[keyof typeof TranscriptionStrategy];
-let AVATAR_VOICE_LANGUAGE = "en" // "et", "lv", "en"
+let AVATAR_VOICE_LANGUAGE = "et" // "et", "lv", "en"
 let TRANSCRIPTION_LANGUAGE = "et"; // "en"
 let AVATARA_SYSTEM_NAME = "Thaddeus_Chair_Sitting_public"; // default
-let AVATAR_GENDER = "femal" // "male"
+let AVATAR_GENDER = "female" // "male"
 export let AVATAR_HUMAN_NAME = "Anu";
 const AVAILABLE_VOICE_IDS = {
   EE_KERT: "adc699478776486997dcf2f7b1534a89",
@@ -46,7 +46,7 @@ export const AVATAR_DEFAULTS = {
   KNOWLEDGE_ID: "b4df7e6a975d403099043769e0b86215", // 7b10a64ca5154b96aaaf3409df206ccf
   // KNOWLEDGE_ID: "7e273b0483b34438a95b11cce31d792e", ""
   // VOICE_ID:voiceId,
-  VOICE_ID:'cef3bc4e0a84424cafcde6f2cf466c97',
+  VOICE_ID: voiceId,
   ACTIVITY_IDLE_TIMEOUT: 3600 // Idle timeout in seconds after last activity before closing session. Range 30–3600.
 }
 
@@ -162,10 +162,12 @@ export const SPEAKER_OPTIONS = [
 
 /**
  * API Endpoints
+ * Using backend proxy to keep API keys secure
  */
 export const API_ENDPOINTS = {
-  ELEVENLABS_SPEECH_TO_TEXT: 'https://api.elevenlabs.io/v1/speech-to-text',
-  SEEKER_QUERY: 'https://seeker.aveotech.com/query'
+  HEYGEN_TOKEN: '/api/heygen-token',
+  ELEVENLABS_SPEECH_TO_TEXT: '/api/transcribe',
+  SEEKER_QUERY: '/api/seeker-query'
 } as const;
 
 /**
