@@ -181,6 +181,7 @@
         opacity: 0.5;
         cursor: not-allowed;
       }
+
     </style>
   </head>
 
@@ -338,11 +339,11 @@
           left: 50%;
           transform: translateX(-50%);
           width: 90%;
-          max-width: 800px;
+          max-width: 600px;
           z-index: 100;
           transition: opacity 0.5s ease;
         ">
-          <div style="display: flex; gap: 10px; align-items: stretch; background: rgba(255, 255, 255, 0.15); padding: 20px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.3);">
+          <div id="seekerChatboxContainer" style="display: flex; gap: 10px; align-items: stretch; background: rgba(255, 255, 255, 0.15); padding: 20px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.3); transition: border 0.3s ease, box-shadow 0.3s ease;">
             <input
               type="text"
               id="seekerInput"

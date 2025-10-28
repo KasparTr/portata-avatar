@@ -90,6 +90,7 @@ const avatarListeningLight = document.getElementById("avatarListeningLight") as 
 const avatarListeningText = document.getElementById("avatarListeningText") as HTMLElement;
 const avatarLoadingOverlay = document.getElementById("avatarLoadingOverlay") as HTMLElement;
 const seekerChatbox = document.getElementById("seekerChatbox") as HTMLElement;
+const seekerChatboxContainer = document.getElementById("seekerChatboxContainer") as HTMLElement;
 const seekerInput = document.getElementById("seekerInput") as HTMLInputElement;
 const seekerAskButton = document.getElementById("seekerAskButton") as HTMLButtonElement;
 
@@ -973,20 +974,37 @@ async function handleSeekerAsk() {
   // Disable button while processing
   seekerAskButton.disabled = true;
   seekerAskButton.textContent = 'Küsin...';
-  
+
+  // Fade input box to background while loading
+  if (seekerChatbox) {
+    seekerChatbox.style.opacity = '0.3';
+    seekerChatbox.style.pointerEvents = 'none';
+  }
+
+  let shouldRestoreOpacity = false;
+
   try {
-   
+
     // Query Seeker RAG
     const response = await querySeekerRAG(question, seekerMessageHistory);
-    
+
     if (response.error) {
       console.error('❌ Seeker error:', response.error);
       alert(`Seeker error: ${response.error}`);
+      shouldRestoreOpacity = true;
     } else {
       // Log the response to console
       console.log('✅ Seeker response:', response.reply);
-      handleSeekerReply(response.reply);
-      
+
+      if (response.reply) {
+        handleSeekerReply(response.reply);
+        // Don't restore opacity - avatar will speak and handleAvatarStopTalking will restore it
+        shouldRestoreOpacity = false;
+      } else {
+        // No reply to speak, restore opacity
+        shouldRestoreOpacity = true;
+      }
+
       // Update history
       if (response.reply) {
         // Add user message to history
@@ -994,24 +1012,32 @@ async function handleSeekerAsk() {
           role: 'user',
           content: question
         });
-        
+
         // Add assistant response to history
         seekerMessageHistory.push({
           role: 'assistant',
           content: response.reply
         });
       }
-      
+
       // Clear input
       seekerInput.value = '';
     }
   } catch (error) {
     console.error('❌ Seeker request failed:', error);
     alert('Failed to query Seeker. Check console for details.');
+    shouldRestoreOpacity = true;
   } finally {
     // Re-enable button
     seekerAskButton.disabled = false;
     seekerAskButton.textContent = 'Küsi';
+
+    // Only restore input box visibility if there was an error or no reply
+    // Otherwise, let handleAvatarStopTalking restore it when avatar finishes speaking
+    if (shouldRestoreOpacity && seekerChatbox) {
+      seekerChatbox.style.opacity = '1';
+      seekerChatbox.style.pointerEvents = 'auto';
+    }
   }
 }
 
