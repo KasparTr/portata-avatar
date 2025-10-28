@@ -8,7 +8,7 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"
     />
-    <title>Interactive Avatar Demo</title>
+    <title>Wenture AI Avatar Demo</title>
     <style>
       /* Speaker selection card styles - HIDDEN FOR POC DEMO */
       /*
@@ -111,35 +111,163 @@
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
       }
+
+      /* Password Protection Styles */
+      #passwordInput:focus {
+        border-color: #667eea;
+      }
+
+      #passwordSubmit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+      }
+
+      #passwordSubmit:active {
+        transform: translateY(0);
+      }
+
+      /* Start Session Button Styles */
+      #startSession:hover {
+        transform: scale(1.1);
+        box-shadow: 0 12px 40px rgba(44, 101, 223, 0.3);
+        background: rgba(255, 255, 255, 0.25);
+      }
+
+      #startSession:active {
+        transform: scale(1.05);
+      }
+
+      #startSession:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: scale(1);
+      }
+
+      /* Stop Session Button Styles */
+      #stopSession:hover {
+        transform: scale(1.1);
+        box-shadow: 0 12px 40px rgba(220, 53, 69, 0.3);
+        background: rgba(255, 255, 255, 0.25);
+      }
+
+      #stopSession:active {
+        transform: scale(1.05);
+      }
+
+      /* Skip Button Styles */
+      #skipButton:hover {
+        transform: scale(1.1);
+        box-shadow: 0 12px 40px rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.25);
+      }
+
+      #skipButton:active {
+        transform: scale(1.05);
+      }
+
+      #skipButton:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: scale(1);
+      }
+
+      /* Seeker Input/Button Disabled Styles */
+      #seekerInput:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      #seekerAskButton:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
     </style>
   </head>
 
-  <body>
-    <main
-      class="container"
-      style="display: flex; flex-direction: column; align-items: center"
-    >
+  <body style="margin: 0; padding: 0; overflow-x: hidden; overflow-y: auto;">
+
+    <!-- Password Protection Overlay -->
+    <div id="passwordProtection" style="
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    ">
+      <div style="
+        background: rgba(255, 255, 255, 0.95);
+        padding: 40px 50px;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+      ">
+        <h2 style="margin: 0 0 10px 0; color: #333; font-size: 28px;">🔒 Protected Access</h2>
+        <p style="margin: 0 0 30px 0; color: #666; font-size: 14px;">Please enter the password to continue</p>
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+          <input
+            type="password"
+            id="passwordInput"
+            placeholder="Enter password"
+            style="
+              padding: 14px 18px;
+              font-size: 16px;
+              border: 2px solid #e0e0e0;
+              border-radius: 10px;
+              outline: none;
+              transition: border-color 0.2s ease;
+            "
+          />
+          <button id="passwordSubmit" style="
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+          ">Unlock</button>
+          <div id="passwordError" style="
+            color: #dc3545;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+          ">Incorrect password. Please try again.</div>
+        </div>
+      </div>
+    </div>
+
+    <main id="mainContent" style="margin: 0; padding: 0;">
 
       <!-- Video Section -->
-      <article style="width: fit-content; position: relative;" id="avatarContainer">
+      <article style="position: relative; width: 100vw; height: 100vh; margin: 0; padding: 0;" id="avatarContainer">
 
         <!-- Avatar Listening Indicator -->
-        <div id="avatarListeningIndicator" style="
+        <!-- <div id="avatarListeningIndicator" style="
           position: absolute;
-          top: 0px;
-          right: 0;
-          display: flex; 
+          top: 20px;
+          right: 20px;
+          display: flex;
           max-width: 200px;
-          align-items: center; 
-          gap: 8px; 
-          padding: 6px 12px; 
-          border-radius: 20px; 
-          background: #f8f9fa; 
-          border: 2px solid #dee2e6;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 16px;
+          border-radius: 20px;
+          background: rgba(248, 249, 250, 0.95);
+          border: 2px solid rgba(222, 226, 230, 0.5);
           font-size: 14px;
           font-weight: 600;
           transition: all 0.3s ease;
           z-index: 10;
+          backdrop-filter: blur(10px);
         ">
           <div id="avatarListeningLight" style="
             width: 12px; 
@@ -149,7 +277,7 @@
             transition: all 0.3s ease;
           "></div>
           <span id="avatarListeningText">Idle</span>
-        </div>
+        </div> -->
 
         <!-- Loading overlay -->
         <div id="avatarLoadingOverlay" style="
@@ -182,52 +310,135 @@
                 margin: 0 auto;
               "></div>
             </div>
-            Connecting to Aveo...
+            Connecting to Wenture.io ...
           </div>
         </div>
-        <video id="avatarVideo" autoplay playsinline style="display: none;"></video>
+        <video id="avatarVideo" autoplay playsinline style="
+          display: none;
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        "></video>
         <img id="avatarPlaceholder" src="/avatar.png" alt="Avatar Placeholder" style="
-          width: 1280px; 
-          height: 720px; 
-          border-radius: 12px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
           object-fit: cover;
         ">
 
         <!-- Seeker RAG Chatbox -->
         <div id="seekerChatbox" style="
-          margin-top: 20px;
-          width: 100%;
-          max-width: 1280px;
+          position: absolute;
+          bottom: 40px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 90%;
+          max-width: 800px;
+          z-index: 100;
+          transition: opacity 0.5s ease;
         ">
-          <fieldset style="margin-bottom: 0;">
-            <div style="display: flex; gap: 10px; align-items: flex-start;">
-              <input
-                type="text"
-                id="seekerInput"
-                placeholder="Esita küsimus..."
-                aria-label="Seeker question input"
-                style="flex: 1; margin-bottom: 0;"
-              />
-              <button id="seekerAskButton" style="
-                padding: 10px 24px;
-                background: #2c65df;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                font-weight: 600;
-                white-space: nowrap;
-              ">Küsi</button>
-            </div>
-          </fieldset>
+          <div style="display: flex; gap: 10px; align-items: stretch; background: rgba(255, 255, 255, 0.15); padding: 20px; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.3);">
+            <input
+              type="text"
+              id="seekerInput"
+              placeholder="Esita küsimus..."
+              aria-label="Seeker question input"
+              disabled
+              style="flex: 1; margin-bottom: 0; border: 2px solid rgba(255, 255, 255, 0.4); padding: 12px 16px; font-size: 16px; background: rgba(255, 255, 255, 0.95); border-radius: 8px;"
+            />
+            <button id="seekerAskButton" disabled style="
+              padding: 0 28px;
+              background: #2c65df;
+              color: white;
+              border: none;
+              border-radius: 8px;
+              cursor: pointer;
+              font-weight: 600;
+              white-space: nowrap;
+              font-size: 16px;
+              transition: all 0.2s ease;
+            ">Küsi</button>
+          </div>
         </div>
-                       
-      </article>
-       
 
-      <!-- Controls Section -->
-      <div id="controlsSection">
+        <!-- Start Session Button -->
+        <button id="startSession" style="
+          position: absolute;
+          bottom: 40px;
+          left: 40px;
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.15);
+          color: #ffffff;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          cursor: pointer;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+          backdrop-filter: blur(20px);
+          transition: all 0.3s ease;
+          z-index: 100;
+          font-family: Arial, sans-serif;
+        ">START</button>
+
+        <!-- Stop Session Button (hidden by default) -->
+        <button id="stopSession" style="
+          position: absolute;
+          bottom: 40px;
+          left: 40px;
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.15);
+          color: #dc3545;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          cursor: pointer;
+          font-size: 14px;
+          display: none;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+          backdrop-filter: blur(20px);
+          transition: all 0.3s ease;
+          z-index: 100;
+          font-family: Arial, sans-serif;
+        ">STOP</button>
+
+        <!-- Skip Button -->
+        <button id="skipButton" disabled style="
+          position: absolute;
+          bottom: 40px;
+          right: 40px;
+          width: 64px;
+          height: 64px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.15);
+          color: #ffffff;
+          border: 1px solid rgba(255, 255, 255, 0.3);
+          cursor: pointer;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+          backdrop-filter: blur(20px);
+          transition: all 0.3s ease;
+          z-index: 100;
+          font-family: Arial, sans-serif;
+        ">SKIP</button>
+
+      </article>
+
+      <!-- Controls Section (Below the fold) -->
+      <!-- <div id="controlsSection" style="padding: 40px 20px; max-width: 800px; margin: 0 auto;"> -->
         <!-- Speaker Selection - HIDDEN FOR POC DEMO -->
         <!--
         <section id="speakerSelection" style="display: none;">
@@ -247,16 +458,15 @@
         -->
 
         <!-- Controls Section -->
-        <section>
+        <!-- <section>
           <section role="group">
-            <button id="startSession">Start Session</button>
             <button id="endSession" disabled>End Session</button>
             <button id="stopSpeaking" disabled>⏹️ Stop</button>
-          </section>
+          </section> -->
 
 
           <!-- Text Input for Avatar -->
-          <section role="group">
+          <!-- <section role="group">
             <input
               type="text"
               id="userInput"
@@ -265,10 +475,10 @@
             />
             <button id="speakButton" role="button">Talk</button>
             <button id="repeatButton" role="button">Repeat</button>
-          </section>
+          </section> -->
 
           <!-- Transcription Strategy Selection -->
-          <section style="display: none;">
+          <!-- <section style="display: none;">
             <fieldset>
               <legend>Transcription Mode</legend>
               <label>
@@ -280,11 +490,11 @@
                 On-demand (transcribe when stopped)
               </label>
             </fieldset>
-          </section>
+          </section> -->
 
 
           <!-- Audio Sensitivity Meter -->
-          <section>
+          <!-- <section>
             <fieldset>
               <legend>Audio Sensitivity Monitor</legend>
               <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
@@ -325,10 +535,10 @@
                 ">🎧 Continuous listening: Ready</div>
               </div>
             </fieldset>
-          </section>
+          </section> -->
 
           <!-- Transcription Output -->
-          <section>
+          <!-- <section>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
               <label for="transcriptionOutput">Live Transcription:</label>
               <div style="display: flex; align-items: center; gap: 15px;">
@@ -348,8 +558,8 @@
               💾 Save Transcription
             </button>
           </section>
-        </section>
-      </div>
+        </section> -->
+      <!-- </div> -->
     </main>
 
     <script type="module" src="/src/main.ts"></script>

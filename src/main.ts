@@ -4,10 +4,66 @@ import StreamingAvatar, {
   TaskType
 } from "@heygen/streaming-avatar";
 import { AudioTranscriptionService, } from "./audioTranscriptionService";
-import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, API_ENDPOINTS } from './constants';
+import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, API_ENDPOINTS, AVATAR_INTRO_TEXT } from './constants';
 import type { TranscriptionStrategyType } from './constants';
 import { KnowledgeBaseService } from './knowledgeBaseService';
 import { querySeekerRAG, type SeekerMessage } from './seekerService';
+
+// Password Protection
+const PASSWORD_PROTECTION_ENABLED = import.meta.env.VITE_PASSWORD_PROTECTION_ENABLED === 'true';
+const APP_PASSWORD = import.meta.env.VITE_APP_PASSWORD;
+
+function initializePasswordProtection() {
+  if (!PASSWORD_PROTECTION_ENABLED) {
+    return;
+  }
+
+  const passwordProtection = document.getElementById('passwordProtection') as HTMLElement;
+  const mainContent = document.getElementById('mainContent') as HTMLElement;
+  const passwordInput = document.getElementById('passwordInput') as HTMLInputElement;
+  const passwordSubmit = document.getElementById('passwordSubmit') as HTMLButtonElement;
+  const passwordError = document.getElementById('passwordError') as HTMLElement;
+
+  // Check if already authenticated
+  const isAuthenticated = sessionStorage.getItem('authenticated') === 'true';
+
+  if (isAuthenticated) {
+    mainContent.style.display = 'block';
+    return;
+  }
+
+  // Show password protection
+  passwordProtection.style.display = 'flex';
+  mainContent.style.display = 'none';
+
+  const checkPassword = () => {
+    const enteredPassword = passwordInput.value;
+
+    if (enteredPassword === APP_PASSWORD) {
+      sessionStorage.setItem('authenticated', 'true');
+      passwordProtection.style.display = 'none';
+      mainContent.style.display = 'block';
+      passwordError.style.display = 'none';
+    } else {
+      passwordError.style.display = 'block';
+      passwordInput.value = '';
+      passwordInput.focus();
+    }
+  };
+
+  passwordSubmit.addEventListener('click', checkPassword);
+  passwordInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      checkPassword();
+    }
+  });
+
+  // Focus on password input
+  setTimeout(() => passwordInput.focus(), 100);
+}
+
+// Initialize password protection immediately
+initializePasswordProtection();
 
 // DOM elements
 const videoElement = document.getElementById("avatarVideo") as HTMLVideoElement;
@@ -15,6 +71,8 @@ const avatarPlaceholder = document.getElementById("avatarPlaceholder") as HTMLEl
 const startButton = document.getElementById(
   "startSession"
 ) as HTMLButtonElement;
+const stopSessionButton = document.getElementById("stopSession") as HTMLButtonElement;
+const skipButton = document.getElementById("skipButton") as HTMLButtonElement;
 const endButton = document.getElementById("endSession") as HTMLButtonElement;
 const stopSpeakingButton = document.getElementById("stopSpeaking") as HTMLButtonElement;
 const speakButton = document.getElementById("speakButton") as HTMLButtonElement;
@@ -31,6 +89,7 @@ const avatarListeningIndicator = document.getElementById("avatarListeningIndicat
 const avatarListeningLight = document.getElementById("avatarListeningLight") as HTMLElement;
 const avatarListeningText = document.getElementById("avatarListeningText") as HTMLElement;
 const avatarLoadingOverlay = document.getElementById("avatarLoadingOverlay") as HTMLElement;
+const seekerChatbox = document.getElementById("seekerChatbox") as HTMLElement;
 const seekerInput = document.getElementById("seekerInput") as HTMLInputElement;
 const seekerAskButton = document.getElementById("seekerAskButton") as HTMLButtonElement;
 
@@ -119,21 +178,27 @@ async function initializeAvatarSession() {
     console.log('🎯 Avatar session created:', !!sessionData);
     
     // Start avatar voice chat session
-    avatar?.muteInputAudio(); // mute by default
-    await avatar.startVoiceChat();
-    setTimeout(() => {
-      console.log('🎯 Avatar voice chat started');
-      // Hide loading overlay.
-      avatar?.muteInputAudio(); // mute by default
-      if (avatarLoadingOverlay) {
-        avatarLoadingOverlay.style.display = 'none';
-      }
-    }, 1000);
+    // avatar?.muteInputAudio(); // mute by default
+    // await avatar.startVoiceChat();
+    // setTimeout(() => {
+    //   console.log('🎯 Avatar voice chat started');
+    //   // Hide loading overlay.
+    //   avatar?.muteInputAudio(); // mute by default
+    //   if (avatarLoadingOverlay) {
+    //     avatarLoadingOverlay.style.display = 'none';
+    //   }
+    // }, 1000);
     
-    // Enable start button, keep stop button disabled until avatar speaks
-    endButton.disabled = false;
-    startButton.disabled = true;
-    
+    // Toggle session buttons
+    startButton.style.display = 'none';
+    if (stopSessionButton) stopSessionButton.style.display = 'flex';
+    if (skipButton) skipButton.disabled = false;
+    if (endButton) endButton.disabled = false;
+
+    // Enable seeker chatbox
+    if (seekerInput) seekerInput.disabled = false;
+    if (seekerAskButton) seekerAskButton.disabled = false;
+
     // Create shared audio stream first to ensure microphone access
     console.log('🎤 Creating shared audio stream...');
     await getCleanSharedAudioStream();
@@ -152,23 +217,42 @@ async function initializeAvatarSession() {
 
     // --- AUDIO ---
     // Initialize audio sensitivity monitoring
-    initializeAudioSensitivityMonitor();
+    // initializeAudioSensitivityMonitor();
     
     // Start audio level monitoring with shared stream
     if (sharedAudioStream) {
       startAudioLevelMonitoring(sharedAudioStream);
     }
-    
+
+    if (avatarLoadingOverlay) {
+      avatarLoadingOverlay.style.display = 'none';
+    }
+    startAvatarIntro()
   } catch (error) {
     console.error("Failed to initialize avatar session:", error);
-    
+
     // Reset button states on error
-    endButton.disabled = true;
-    startButton.disabled = false;
-    
+    if (endButton) endButton.disabled = true;
+    startButton.style.display = 'flex';
+    if (stopSessionButton) stopSessionButton.style.display = 'none';
+    if (skipButton) skipButton.disabled = true;
+
+    // Keep seeker chatbox disabled on error
+    if (seekerInput) seekerInput.disabled = true;
+    if (seekerAskButton) seekerAskButton.disabled = true;
+
+    // Hide loading overlay
+    if (avatarLoadingOverlay) {
+      avatarLoadingOverlay.style.display = 'none';
+    }
+
     // Show error to user
     alert(`Failed to start avatar session: ${error}`);
   }
+}
+
+function startAvatarIntro() {
+  handleRepeatThis(AVATAR_INTRO_TEXT)
 }
 
 
@@ -204,12 +288,18 @@ function updateTranscriptionStatus(status: string) {
 function handleAvatarStartTalking() {
   isAvatarSpeaking = true;
   // stopContinuousTranscription();
-  
+
   // Update UI to show avatar is speaking
   updateTranscriptionStatus('🎯 Avatar speaking...');
-  
+
+  // Fade input box to background
+  if (seekerChatbox) {
+    seekerChatbox.style.opacity = '0.3';
+    seekerChatbox.style.pointerEvents = 'none';
+  }
+
   // Enable stop speaking button when avatar starts talking
-  stopSpeakingButton.disabled = false;
+  if (stopSpeakingButton) stopSpeakingButton.disabled = false;
   if (speakButton) speakButton.disabled = true; // Disable speak button
   if (repeatButton) repeatButton.disabled = true; // Disable repeat button
 }
@@ -222,31 +312,37 @@ async function handleAvatarStopTalking() {
   //   console.log('🎤 Resuming continuous transcription...');
   //   await startContinuousTranscription();
   // }
-  
+
+  // Restore input box focus
+  if (seekerChatbox) {
+    seekerChatbox.style.opacity = '1';
+    seekerChatbox.style.pointerEvents = 'auto';
+  }
+
   // Disable stop speaking button and re-enable other buttons when avatar stops
-  stopSpeakingButton.disabled = true;
+  if (stopSpeakingButton) stopSpeakingButton.disabled = true;
   if (speakButton) speakButton.disabled = false;
   if (repeatButton) repeatButton.disabled = false;
 }
 
 // Initialize audio sensitivity monitoring
-function initializeAudioSensitivityMonitor() {
-  // Set up threshold slider
-  silenceThreshold.addEventListener('input', (e) => {
-    const target = e.target as HTMLInputElement;
-    currentSilenceThreshold = parseFloat(target.value);
-    thresholdValue.textContent = `${Math.round(currentSilenceThreshold * 100)}%`;
+// function initializeAudioSensitivityMonitor() {
+//   // Set up threshold slider
+//   silenceThreshold.addEventListener('input', (e) => {
+//     const target = e.target as HTMLInputElement;
+//     currentSilenceThreshold = parseFloat(target.value);
+//     thresholdValue.textContent = `${Math.round(currentSilenceThreshold * 100)}%`;
 
-    // Update transcription service threshold if it exists
-    if (transcriptionService) {
-      transcriptionService.updateSilenceThreshold(currentSilenceThreshold);
-    }
-  });
+//     // Update transcription service threshold if it exists
+//     if (transcriptionService) {
+//       transcriptionService.updateSilenceThreshold(currentSilenceThreshold);
+//     }
+//   });
   
-  // Initialize threshold display
-  thresholdValue.textContent = `${Math.round(currentSilenceThreshold * 100)}%`;
-  silenceThreshold.value = currentSilenceThreshold.toString();
-}
+//   // Initialize threshold display
+//   thresholdValue.textContent = `${Math.round(currentSilenceThreshold * 100)}%`;
+//   silenceThreshold.value = currentSilenceThreshold.toString();
+// }
 
 // Start audio level monitoring
 function startAudioLevelMonitoring(stream: MediaStream) {
@@ -349,26 +445,39 @@ export async function interruptAvatar() {
 
 // End the avatar session
 async function terminateAvatarSession() {
-  if (!avatar || !sessionData) return;
+  // Stop avatar if it exists
+  if (avatar && sessionData) {
+    // Stop continuous transcription
+    await stopContinuousTranscription();
 
-  // Stop continuous transcription
-  await stopContinuousTranscription();
-  
-  await avatar.stopAvatar();
+    await avatar.stopAvatar();
+    avatar = null;
+  }
+
+  // Always reset UI regardless of avatar state
   videoElement.srcObject = null;
   videoElement.style.display = 'none';
-  avatar = null;
-  
+
   // Show placeholder
   if (avatarPlaceholder) {
     avatarPlaceholder.style.display = 'flex';
   }
-  
+
   // Reset button states
-  startButton.disabled = false;
-  endButton.disabled = true;
-  speakButton.disabled = false;
-  repeatButton.disabled = false;
+  startButton.style.display = 'flex';
+  if (stopSessionButton) stopSessionButton.style.display = 'none';
+  if (skipButton) skipButton.disabled = true;
+  if (endButton) endButton.disabled = true;
+  if (speakButton) speakButton.disabled = false;
+  if (repeatButton) repeatButton.disabled = false;
+
+  // Disable seeker chatbox and restore opacity
+  if (seekerInput) seekerInput.disabled = true;
+  if (seekerAskButton) seekerAskButton.disabled = true;
+  if (seekerChatbox) {
+    seekerChatbox.style.opacity = '1';
+    seekerChatbox.style.pointerEvents = 'auto';
+  }
 }
 
 async function handleSeekerReply(reply?: string) {
@@ -382,14 +491,14 @@ async function handleSeekerReply(reply?: string) {
 
 // Handle speaking event
 async function handleSpeak() {
-  if (avatar && userInput.value) {
+  if (avatar && userInput && userInput.value) {
     const avatarText = userInput.value;
     await avatar.speak({
       text: avatarText,
     });
-    
+
     // Inject avatar response into transcription if transcription is active
-    if (transcriptionOutput.value) {
+    if (transcriptionOutput && transcriptionOutput.value) {
       const avatarTranscription = `[${AVATAR_DEFAULTS.AVATAR_HUMAN_NAME}]: ${avatarText}`;
       const currentText = transcriptionOutput.value;
       const separator = currentText ? '\n\n' : '';
@@ -399,15 +508,24 @@ async function handleSpeak() {
 }
 
 // Handle talking event
-async function handleRepeat() {
-  if (avatar && userInput.value) {
+async function handleRepeatThis(repeateThis?: string) {
+  if (avatar && repeateThis) {
     await avatar.speak({
-      text: userInput.value,
+      text: repeateThis,
       taskType: TaskType.REPEAT
     });
+  }
+}
+
+// Handle talking event
+async function handleRepeat() {
+  if (userInput) {
+    handleRepeatThis(userInput.value)
     userInput.value = ""; // Clear input after talking
   }
 }
+
+
 
 // Initialize continuous transcription service
 // async function initializeTranscriptionService() {
@@ -776,17 +894,23 @@ document.addEventListener('DOMContentLoaded', () => {
   // Lever controls removed - unified button is now avatar-only
   // TODO: Hide or remove lever UI elements from HTML
 
-  
+
   // Save transcription button event listener
-  saveTranscriptionButton.addEventListener("click", saveTranscriptionToKnowledge);
-  
+  if (saveTranscriptionButton) {
+    saveTranscriptionButton.addEventListener("click", saveTranscriptionToKnowledge);
+  }
+
   // Seeker chatbox event listeners
-  seekerAskButton.addEventListener("click", handleSeekerAsk);
-  seekerInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") {
-      handleSeekerAsk();
-    }
-  });
+  if (seekerAskButton) {
+    seekerAskButton.addEventListener("click", handleSeekerAsk);
+  }
+  if (seekerInput) {
+    seekerInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        handleSeekerAsk();
+      }
+    });
+  }
   
   // Initialize drag functionality
   
@@ -797,23 +921,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Event listeners for buttons
 startButton.addEventListener("click", initializeAvatarSession);
-endButton.addEventListener("click", terminateAvatarSession);
-stopSpeakingButton.addEventListener("click", interruptAvatar);
-speakButton.addEventListener("click", handleSpeak);
-repeatButton.addEventListener("click", handleRepeat);
+if (stopSessionButton) {
+  stopSessionButton.addEventListener("click", terminateAvatarSession);
+}
+if (skipButton) {
+  skipButton.addEventListener("click", interruptAvatar);
+}
+if (endButton) {
+  endButton.addEventListener("click", terminateAvatarSession);
+}
+if (stopSpeakingButton) {
+  stopSpeakingButton.addEventListener("click", interruptAvatar);
+}
+if (speakButton) {
+  speakButton.addEventListener("click", handleSpeak);
+}
+if (repeatButton) {
+  repeatButton.addEventListener("click", handleRepeat);
+}
 
 // Update live transcription with automatic saving
 function updateLiveTranscription(text: string) {
   try {
+    if (!transcriptionOutput) return;
+
     const currentText = transcriptionOutput.value;
     const separator = currentText ? '\n\n' : '';
     transcriptionOutput.value = currentText + separator + text;
     transcriptionOutput.scrollTop = transcriptionOutput.scrollHeight;
-    
+
     // Auto-save transcription after each update
     // saveTranscriptionToKnowledge();
   } catch (error) {
-    
+
   }
 
 }
