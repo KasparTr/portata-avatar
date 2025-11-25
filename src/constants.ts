@@ -174,7 +174,7 @@ export const API_ENDPOINTS = {
  * Seeker RAG System Configuration
  */
 export const SEEKER_CONFIG = {
-  NAMESPACE: 'ehr', // Update this with your actual namespace
+  NAMESPACE: 'maaruum_ee_905221', // 'ehr' Update this with your actual namespace
   ROLE: 'Customer support'
 } as const;
 
@@ -204,35 +204,27 @@ export const KNOWLEDGEBASE_BASE = `
 * You are taking part of a meeting between high level officials who are presented MARUs AI capabilities. 
 * The meeting is about MARU and use of AI.  
 `
+export const AVATAR_INTRO_TEXT = "Tere, see on test intro"
+// export const AVATAR_INTRO_TEXT = `
+// Tere! Mina olen Mari, Wenture poolt loodud MaRu tehisintellektist abiline. Räägin teile lühidalt Maa- ja Ruumiametist.
 
-export const AVATAR_INTRO_TEXT = `
-Tere päevast.
-Mina olen Eesti ettevõtete Wenture ja Aveo poolt Maa- ja Ruumiametile loodud virtuaalne tehisintellekti agent. 
-Minu eesmärk on toetada Eesti digiriigi arengut, aidata inimestel avastada avalikke teenuseid ja pakkuda neile sõbralikku kasutajatuge.
-Täna räägin teile Maa- ja Ruumiametist — lühidalt MaRust.
+// MaRu alustas tööd esimeseljaanuaril 2025. See on maa ja ruumiloome kompetentsikeskus, mis toetab kvaliteetset ja kestlikku ruumiarengut. Amet loodi Maa-ameti baasil ning sinna koondati varasemalt eri asutustes olnud valdkonnad. need on aaparandus, e-ehitus ja Ehitisregister ning rakenduslik ruumiline planeerimine.
 
-Maa- ja Ruumiamet on riigiasutus, mis loodi esimesel jaanuaril kaks tuhat kakskümmend viis.
-See sündis reformi käigus, ühendades endise Maa-ameti, Kliimaministeeriumi ruumilise planeerimise ja maaparanduse funktsioonid ning riigimaa haldamise teenused.
-Eesmärk oli koondada kõik Eesti maa- ja ruumiandmete haldusfunktsioonid ühe katusorganisatsiooni alla.
-Tulemuseks on ühtne, tõhus ja andmepõhine teenus kogu riigile.
+// MaRu töötab Majandus- ja Kommunikatsiooniministeeriumi haldusalas. Eesmärk on muuta maa- ja ruumiandmete haldamine tõhusamaks, koondada teenused ühte kohta ning toetada Eesti ruumilise arengu eesmärke. Varasema sadade teenuste asemel pakume nüüd kolmkümmend kahte selgelt kirjeldatud avalikku teenust.
 
-MaRu tegutseb Majandus- ja Kommunikatsiooniministeeriumi haldusalas.
-Ameti missioon on lihtne ja tugev. Koos loome väärtuslikku maad ja parimat ruumi.
-Visioon: Eestimaa ruum on hoolivalt hoitud ja arukalt arendatud.
+// Peamised valdkonnad on ruumiandmete kogumine ja avalikustamine, kaugseire, ETAK ja Eesti kaartide koostamine, maakatastri pidamine, maaparanduse tagamine, riigimaa tehingud ja haldus, maaportfelli juhtimine ning strateegiline ruumiplaneerimine. 
+// MaRu arendab ka digiplatvorme: e-Ehituse platvorm koos Ehitisregistri ja Planeeringute Infosüsteemiga, Maatoimingute platvorm koos Minu Katastriga ning liigub ühtse ruumiteenuste platvormi, RUTA suunas.
 
-MaRu väärtused on meisterlikkus, avatuse ja koostöö vaim, tulemuslikkus ning uuendusmeelsus.
-Need põhimõtted juhivad kogu ametit, alates katastrist ja maahindamisest kuni digitaalehituse ja e-teenusteni.
+// Eestis loodi MaRu-ga ka riigiarhitekti roll, kes juhib strateegilist ruumiplaneerimist ja toetab terviklikku ruumiloomet. Meeskond on väike aga ambitsioonikas.
 
-Amet haldab Eesti maakatastrit ja riigimaid, arendab geoinfo teenuseid ning juhib Geoportaali, EST Hub-i ja kolm d ruumiandmete platvorme.
-Eesti on nende kaudu tõusnud Euroopa liidriks avatud ruumiandmete ja digitaalse planeerimise valdkonnas.
+// Aasta jooksul oleme liitnud erinevad inimesed ja tegevused ning muutunud väiksemaks kuid tõhusamaks. Teenused on töötanud ka muudatuste ajal.
 
-MaRu bürood tegutsevad kõigis Eesti maakondades.
-Igal aastal korraldab amet koostöö- ja innovatsioonipäevi. Näiteks MaRu Koostööpäeva ja EST Hub Vision Day’d, kus kohtuvad teadlased, ametnikud ja ettevõtjad.
+// MaRu missioon on: “Koos loome väärtuslikku maad ja parimat ruumi”. Visioon on: “Eestimaa ruum on hoolivalt hoitud ja arukalt arendatud”. Me soovime olla meisterlikud, avatud ja tulemuslikud uuendajad.
 
-Maa- ja Ruumiameti tugevus peitub tema võimes ühendada planeerimise, ehituse ja ruumiandmete maailmad üheks tervikuks.
-Väljakutseks jääb ajalooliste süsteemide sidumine ning uuenduste ja õigusliku stabiilsuse tasakaalustamine, aga just see ongi digi-riigi tee.
+// Rohkem infot leiad aadressilt maaruum punkt ee.
+// Meie Demoalal saad tutvuda MaRu digilahendustega ja ka minuga – vastan meeleldi sinu küsimustele.
 
-Lõpetuseks. Maa- ja Ruumiamet tähistab uut ajastut Eesti ruumilises arengus — hoolivalt hoitud, targalt juhitud ja tehnoloogiliselt eesrindlikku Eestimaad.
+// Mina olen MaRu klientide tehisintellektist teenindaja. Peadirektor pani mulle nimeks Mari. Mul pole töölepingut ega tööaega – olen masin ja töötan ka öösiti. Olen siin selleks, et MaRu-d toetada. Minuga saab juba praegu suhelda e-Ehituse platvormil ning tulevikus ka teistes MaRu kanalites.
 
-Aitäh. Järgmiseks küsi julgelt MaRu E-Ehituse platvormi kohta.
-`
+// Kui sul on küsimusi, siis küsi julgelt.
+// `
