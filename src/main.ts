@@ -1,10 +1,6 @@
-import StreamingAvatar, {
-  AvatarQuality,
-  StreamingEvents,
-  TaskType
-} from "@heygen/streaming-avatar";
+import * as sdk from "@d-id/client-sdk";
 import { AudioTranscriptionService, } from "./audioTranscriptionService";
-import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, API_ENDPOINTS, AVATAR_INTRO_TEXT } from './constants';
+import { TranscriptionStrategy, SPEAKER_OPTIONS, AVATAR_DEFAULTS, AVATAR_INTRO_TEXT, DID_AGENT_CONFIG } from './constants';
 import type { TranscriptionStrategyType } from './constants';
 import { KnowledgeBaseService } from './knowledgeBaseService';
 import { querySeekerRAG, type SeekerMessage } from './seekerService';
@@ -94,8 +90,8 @@ const seekerChatbox = document.getElementById("seekerChatbox") as HTMLElement;
 const seekerInput = document.getElementById("seekerInput") as HTMLInputElement;
 const seekerAskButton = document.getElementById("seekerAskButton") as HTMLButtonElement;
 
-let avatar: StreamingAvatar | null = null;
-let sessionData: any = null;
+let agentManager: any = null;
+let isConnected: boolean = false;
 let transcriptionService: AudioTranscriptionService | null = null;
 let currentStrategy: TranscriptionStrategyType = TranscriptionStrategy.ON_DEMAND;
 let currentSpeaker: string = SPEAKER_OPTIONS[0].id;
@@ -145,51 +141,105 @@ const AUDIO_STREAM_CONFIG: MediaStreamConstraints = {
 let sharedAudioStream: MediaStream | null = null;
 
 
-// Helper function to fetch access token via backend proxy
-async function fetchAccessToken(): Promise<string> {
-  const response = await fetch(API_ENDPOINTS.HEYGEN_TOKEN, {
-    method: "POST",
-  });
+// Helper function to fetch D-ID credentials via backend proxy
+// async function fetchDIDCredentials(): Promise<{ username: string; password: string }> {
+//   const response = await fetch(API_ENDPOINTS.DID_AUTH, {
+//     method: "POST",
+//   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch token: ${response.status}`);
-  }
+//   if (!response.ok) {
+//     throw new Error(`Failed to fetch D-ID credentials: ${response.status}`);
+//   }
 
-  const { data } = await response.json();
-  return data.token;
-}
+//   const data = await response.json();
+//   return { username: data.username, password: data.password };
+// }
 
-// Initialize streaming avatar session
+// INFO: https://www.npmjs.com/package/@d-id/client-sdk
+// Initialize streaming avatar session with D-ID
 async function initializeAvatarSession() {
   try {
     // Show loading overlay
     if (avatarLoadingOverlay) {
       avatarLoadingOverlay.style.display = 'flex';
     }
-    console.log("Starting avatar session initialization...");
-    const token = await fetchAccessToken();
-    avatar = new StreamingAvatar({ token });
+    console.log("Starting D-ID avatar session initialization...");
 
-    avatar.on(StreamingEvents.STREAM_READY, handleStreamReady);
-    avatar.on(StreamingEvents.STREAM_DISCONNECTED, handleStreamDisconnected);
-    avatar.on(StreamingEvents.AVATAR_START_TALKING, handleAvatarStartTalking);
-    avatar.on(StreamingEvents.AVATAR_STOP_TALKING, handleAvatarStopTalking);
-    
-    sessionData = await avatar.createStartAvatar(createAvatarConfig());
-    console.log('🎯 Avatar session created:', !!sessionData);
-    
-    // Start avatar voice chat session
-    // avatar?.muteInputAudio(); // mute by default
-    // await avatar.startVoiceChat();
-    // setTimeout(() => {
-    //   console.log('🎯 Avatar voice chat started');
-    //   // Hide loading overlay.
-    //   avatar?.muteInputAudio(); // mute by default
-    //   if (avatarLoadingOverlay) {
-    //     avatarLoadingOverlay.style.display = 'none';
-    //   }
-    // }, 1000);
-    
+    // Fetch D-ID credentials from backend
+    // const credentials = await fetchDIDCredentials();
+
+    // Create Basic Auth token
+    // const authToken = btoa(`${credentials.username}:${credentials.password}`);
+
+    // Set up D-ID callbacks
+    const callbacks = {
+      onSrcObjectReady: (value: MediaStream) => {
+        console.log('🎯 D-ID stream ready');
+        if (videoElement) {
+          videoElement.srcObject = value;
+          videoElement.onloadedmetadata = () => {
+            videoElement.play().catch(console.error);
+            // Show video and hide placeholder
+            videoElement.style.display = 'flex';
+            if (avatarPlaceholder) {
+              avatarPlaceholder.style.display = 'none';
+            }
+            console.log('🎯 D-ID video stream is now playing');
+          };
+        }
+        return value;
+      },
+      onConnectionStateChange: (state: string) => {
+        console.log('🎯 D-ID connection state:', state);
+        if (state === 'connected') {
+          isConnected = true;
+          console.log('🎯 D-ID agent connected successfully');
+        } else if (state === 'disconnected' || state === 'closed' || state === 'fail') {
+          handleStreamDisconnected();
+        }
+      },
+      onVideoStateChange: (state: string) => {
+        console.log('🎯 D-ID video state:', state);
+        if (state === 'STOP') {
+          handleAvatarStopTalking();
+          // if(agentManager) agentManager.reconnect()
+        } else {
+          handleAvatarStartTalking();
+        }
+      },
+      onError: (error: any, errorData: any) => {
+        console.error('🎯 D-ID error:', error, errorData);
+      }
+    };
+
+    // // Create D-ID agent manager
+    // const auth = {
+    //   type: 'bearer' as const,
+    //   token: authToken
+    // };
+
+    const streamOptions = {
+      compatibilityMode: 'auto' as const,
+      streamWarmup: true,
+      // sessionTimeout: 300 // Maximum session timeout in seconds (5 minutes)
+    };
+
+    // 3. Paste the 'data-client-key' in the 'auth.clientKey' variable
+    const auth = { type: 'key' as const, clientKey: 'Z29vZ2xlLW9hdXRoMnwxMTEyOTI4MjA1MzkxMjYyODMzNzA6UWtqRFM5eUFIOGl0N2xLMElVN0No' };
+
+    agentManager = await sdk.createAgentManager(DID_AGENT_CONFIG.AGENT_ID, {
+      auth,
+      callbacks,
+      streamOptions,
+      mode: 'Functional' as any
+    });
+
+    console.log('🎯 D-ID agent manager created');
+
+    // Connect to the agent
+    await agentManager.connect();
+    console.log('🎯 D-ID agent connection initiated');
+
     // Toggle session buttons
     startButton.style.display = 'none';
     if (stopSessionButton) stopSessionButton.style.display = 'flex';
@@ -204,22 +254,6 @@ async function initializeAvatarSession() {
     console.log('🎤 Creating shared audio stream...');
     await getCleanSharedAudioStream();
 
-    // --- TRANSCRIPTION ---
-    // // Initialize transcription service (separate from avatar)
-    // console.log('🎤 Initializing transcription service...');
-    // await initializeTranscriptionService();
-
-    // // Start continuous transcription (completely separate from avatar)
-    // console.log('🎤 Starting continuous transcription...');
-    // await startContinuousTranscription();
-
-    // // Add toggle instructions
-    // updateTranscriptionStatus('🎤 Transcription active. Press SPACE to toggle avatar listening.');
-
-    // --- AUDIO ---
-    // Initialize audio sensitivity monitoring
-    // initializeAudioSensitivityMonitor();
-    
     // Start audio level monitoring with shared stream
     if (sharedAudioStream) {
       startAudioLevelMonitoring(sharedAudioStream);
@@ -228,9 +262,11 @@ async function initializeAvatarSession() {
     if (avatarLoadingOverlay) {
       avatarLoadingOverlay.style.display = 'none';
     }
+
+    // Start the avatar intro
     startAvatarIntro()
   } catch (error) {
-    console.error("Failed to initialize avatar session:", error);
+    console.error("Failed to initialize D-ID avatar session:", error);
 
     // Reset button states on error
     if (endButton) endButton.disabled = true;
@@ -248,33 +284,12 @@ async function initializeAvatarSession() {
     }
 
     // Show error to user
-    alert(`Failed to start avatar session: ${error}`);
+    alert(`Failed to start D-ID avatar session: ${error}`);
   }
 }
 
 function startAvatarIntro() {
   handleRepeatThis(AVATAR_INTRO_TEXT)
-}
-
-
-function createAvatarConfig(){
-  const config = {
-    quality: AvatarQuality.High,
-    avatarName: AVATAR_DEFAULTS.AVATAR_NAME,
-    knowledgeId: AVATAR_DEFAULTS.KNOWLEDGE_ID,
-    language: AVATAR_DEFAULTS.LANGUAGE,
-    voice: {},
-    activityIdleTimeout: AVATAR_DEFAULTS.ACTIVITY_IDLE_TIMEOUT,
-    // knowledgeBase: knowledgeBaseLatest
-  }
-  if(AVATAR_DEFAULTS.VOICE_ID){
-    config.voice = {
-      voiceId:AVATAR_DEFAULTS.VOICE_ID,
-      rate: AVATAR_DEFAULTS.VOICE_RATE,
-      // emotion: VoiceEmotion.FRIENDLY,
-    }
-  }
-  return config
 }
 
 // Update transcription status display
@@ -398,28 +413,6 @@ function startAudioLevelMonitoring(stream: MediaStream) {
   }
 }
 
-// Handle when avatar stream is ready
-function handleStreamReady(event: any) {
-  console.log('🎯 Avatar stream ready event fired');
-  
-  if (event.detail && videoElement) {
-    videoElement.srcObject = event.detail;
-    videoElement.onloadedmetadata = () => {
-      videoElement.play().catch(console.error);
-      // Show video and hide placeholder
-      videoElement.style.display = 'flex';
-      if (avatarPlaceholder) {
-        avatarPlaceholder.style.display = 'none';
-      }
-      console.log('🎯 Avatar video stream is now playing and ready for speech');
-      
-    };
-  } else {
-    console.log('🎯 No avatar stream available in event');
-    console.log('🎯 Session data exists:', !!sessionData);
-  }
-}
-
 // Handle stream disconnection
 function handleStreamDisconnected() {
   console.log("Stream disconnected");
@@ -434,25 +427,27 @@ function handleStreamDisconnected() {
   }
 
   // Enable start button and disable end button
-  startButton.disabled = false;
-  endButton.disabled = true;
+  if(startButton) startButton.disabled = false;
+  if(endButton) endButton.disabled = true;
 }
 
-// Interrupt avatar speaking (without ending session)
+// Interrupt avatar speaking (D-ID doesn't have direct interrupt, so we'll handle it differently)
 export async function interruptAvatar() {
-  if (!avatar || !isAvatarSpeaking) return;
-  await avatar.interrupt();
+  if (!agentManager || !isAvatarSpeaking) return;
+  // D-ID doesn't have a direct interrupt method, but stopping speaking will be handled by state changes
+  console.log('🎯 Interrupt requested (D-ID)');
 }
 
 // End the avatar session
 async function terminateAvatarSession() {
-  // Stop avatar if it exists
-  if (avatar && sessionData) {
+  // Stop D-ID agent if it exists
+  if (agentManager && isConnected) {
     // Stop continuous transcription
     await stopContinuousTranscription();
 
-    await avatar.stopAvatar();
-    avatar = null;
+    await agentManager.disconnect();
+    agentManager = null;
+    isConnected = false;
   }
 
   // Always reset UI regardless of avatar state
@@ -482,20 +477,21 @@ async function terminateAvatarSession() {
 }
 
 async function handleSeekerReply(reply?: string) {
-  if (avatar && reply) {
-    await avatar.speak({
-      text: reply,
-      taskType: TaskType.REPEAT
+  if (agentManager && reply) {
+    await agentManager.speak({
+      type: 'text',
+      input: reply
     });
   }
 }
 
 // Handle speaking event
 async function handleSpeak() {
-  if (avatar && userInput && userInput.value) {
+  if (agentManager && userInput && userInput.value) {
     const avatarText = userInput.value;
-    await avatar.speak({
-      text: avatarText,
+    await agentManager.speak({
+      type: 'text',
+      input: avatarText
     });
 
     // Inject avatar response into transcription if transcription is active
@@ -510,10 +506,10 @@ async function handleSpeak() {
 
 // Handle talking event
 async function handleRepeatThis(repeateThis?: string) {
-  if (avatar && repeateThis) {
-    await avatar.speak({
-      text: repeateThis,
-      taskType: TaskType.REPEAT
+  if (agentManager && repeateThis) {
+    await agentManager.speak({
+      type: 'text',
+      input: repeateThis
     });
   }
 }
@@ -757,11 +753,11 @@ document.addEventListener('keydown', (event) => {
   // Space key for toggle avatar listening (only when not typing in input fields)
   if (event.code === 'Space' && !isTypingInInput(event.target)) {
     event.preventDefault(); // Prevent page scroll
-    
+
     // Toggle avatar listening on space press
-    if (avatar) {
+    if (agentManager) {
       if (isAvatarListening) {
-        interruptAvatar(); // needs to be interrupted first, otherwise stop will throw 400 API error.
+        interruptAvatar();
         stopAvatarListening();
       } else {
         startAvatarListening();
@@ -794,14 +790,14 @@ async function getSharedAudioStream(): Promise<MediaStream> {
   return sharedAudioStream;
 }
 
-// Avatar toggle listening functions
+// Avatar toggle listening functions (D-ID handles audio differently)
 async function startAvatarListening() {
-  if (!avatar || isAvatarListening) return;
-  
+  if (!agentManager || isAvatarListening) return;
+
   try {
-    console.log("Starting avatar listening (toggle)");
-    // await avatar.startListening();
-    avatar.unmuteInputAudio()
+    console.log("Starting avatar listening (toggle) - D-ID");
+    // D-ID doesn't have explicit mute/unmute methods in the docs
+    // Audio handling is done through WebRTC connection
     isAvatarListening = true;
     updateTranscriptionStatus('🎯 Avatar listening... (press SPACE to stop)');
     updateAvatarListeningIndicator(true);
@@ -811,12 +807,12 @@ async function startAvatarListening() {
 }
 
 async function stopAvatarListening() {
-  if (!avatar || !isAvatarListening) return;
-  
+  if (!agentManager || !isAvatarListening) return;
+
   try {
-    console.log("🎯 Stopping avatar listening (toggle)");
-    // await avatar.stopListening();
-    avatar.muteInputAudio()
+    console.log("🎯 Stopping avatar listening (toggle) - D-ID");
+    // D-ID doesn't have explicit mute/unmute methods in the docs
+    // Audio handling is done through WebRTC connection
     isAvatarListening = false;
     updateTranscriptionStatus('🎤 Transcription active. Press SPACE to toggle avatar listening.');
     updateAvatarListeningIndicator(false);

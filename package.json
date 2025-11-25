@@ -14,6 +14,7 @@
     "vite": "^7.1.2"
   },
   "dependencies": {
+    "@d-id/client-sdk": "^1.1.14",
     "@elevenlabs/elevenlabs-js": "^2.12.0",
     "@heygen/streaming-avatar": "^2.1.0",
     "elevenlabs-js": "^1.2.6",

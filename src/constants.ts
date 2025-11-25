@@ -167,7 +167,15 @@ export const SPEAKER_OPTIONS = [
 export const API_ENDPOINTS = {
   HEYGEN_TOKEN: '/api/heygen-token',
   ELEVENLABS_SPEECH_TO_TEXT: '/api/transcribe',
-  SEEKER_QUERY: '/api/seeker-query'
+  SEEKER_QUERY: '/api/seeker-query',
+  DID_AUTH: '/api/did-auth'
+} as const;
+
+/**
+ * D-ID Agent Configuration
+ */
+export const DID_AGENT_CONFIG = {
+  AGENT_ID: 'v2_agt_xbFD_y9E'
 } as const;
 
 /**
@@ -206,33 +214,8 @@ export const KNOWLEDGEBASE_BASE = `
 `
 
 export const AVATAR_INTRO_TEXT = `
-Tere päevast.
-Mina olen Eesti ettevõtete Wenture ja Aveo poolt Maa- ja Ruumiametile loodud virtuaalne tehisintellekti agent. 
-Minu eesmärk on toetada Eesti digiriigi arengut, aidata inimestel avastada avalikke teenuseid ja pakkuda neile sõbralikku kasutajatuge.
-Täna räägin teile Maa- ja Ruumiametist — lühidalt MaRust.
-
-Maa- ja Ruumiamet on riigiasutus, mis loodi esimesel jaanuaril kaks tuhat kakskümmend viis.
-See sündis reformi käigus, ühendades endise Maa-ameti, Kliimaministeeriumi ruumilise planeerimise ja maaparanduse funktsioonid ning riigimaa haldamise teenused.
-Eesmärk oli koondada kõik Eesti maa- ja ruumiandmete haldusfunktsioonid ühe katusorganisatsiooni alla.
-Tulemuseks on ühtne, tõhus ja andmepõhine teenus kogu riigile.
-
-MaRu tegutseb Majandus- ja Kommunikatsiooniministeeriumi haldusalas.
-Ameti missioon on lihtne ja tugev. Koos loome väärtuslikku maad ja parimat ruumi.
-Visioon: Eestimaa ruum on hoolivalt hoitud ja arukalt arendatud.
-
-MaRu väärtused on meisterlikkus, avatuse ja koostöö vaim, tulemuslikkus ning uuendusmeelsus.
-Need põhimõtted juhivad kogu ametit, alates katastrist ja maahindamisest kuni digitaalehituse ja e-teenusteni.
-
-Amet haldab Eesti maakatastrit ja riigimaid, arendab geoinfo teenuseid ning juhib Geoportaali, EST Hub-i ja kolm d ruumiandmete platvorme.
-Eesti on nende kaudu tõusnud Euroopa liidriks avatud ruumiandmete ja digitaalse planeerimise valdkonnas.
-
-MaRu bürood tegutsevad kõigis Eesti maakondades.
-Igal aastal korraldab amet koostöö- ja innovatsioonipäevi. Näiteks MaRu Koostööpäeva ja EST Hub Vision Day’d, kus kohtuvad teadlased, ametnikud ja ettevõtjad.
-
-Maa- ja Ruumiameti tugevus peitub tema võimes ühendada planeerimise, ehituse ja ruumiandmete maailmad üheks tervikuks.
-Väljakutseks jääb ajalooliste süsteemide sidumine ning uuenduste ja õigusliku stabiilsuse tasakaalustamine, aga just see ongi digi-riigi tee.
-
-Lõpetuseks. Maa- ja Ruumiamet tähistab uut ajastut Eesti ruumilises arengus — hoolivalt hoitud, targalt juhitud ja tehnoloogiliselt eesrindlikku Eestimaad.
-
-Aitäh. Järgmiseks küsi julgelt MaRu E-Ehituse platvormi kohta.
+Tere! Mina olen Maa- ja Ruumiameti peadirektori avatar ja soovin tutvustada meie organisatsiooni. MARU on esimesel jaanuaril kakstuhat kakskümmend viis tööd alustanud maa ja ruumiloome kompetentsikeskus, mis toetab Eesti inimesi parima elukeskkonna loomisel. Uus asutus loodi Maa-ameti baasil ning sinna liideti varem hajutatud funktsioonid: maaparanduse valdkond (Põllumajandus- ja Toiduametist), e-ehitus koos Ehitisregistriga (Kliimaministeeriumist) ning ruumilise planeerimise rakenduslikud ülesanded (Regionaal- ja Põllumajandusministeeriumist).
+MaRu loomise eesmärk on muuta maa- ja ruumiandmete haldamine tõhusamaks, pakkuda paremaid teenuseid ning toetada Eesti ruumilise arengu eesmärke. Amet on terviklike lahenduste pakkuja ruumiandmete, planeerimise ja maatoimingute valdkonnas. Varasema saja kaheksakümmend kuue eraldiseisva teenuse asemel pakub MaRu nüüd kolmkümmend kaks selgelt kirjeldatud ja eesmärgistatud teenust.
+Peamised teenusevaldkonnad hõlmavad ruumiandmeid (sh kaugseire ja ETAK), maakatastri pidamist, maaparandust, riigimaa tehinguid ja toiminguid ning strateegilist ruumiplaneerimist ja maaportfelli haldamist. Samuti arendab amet digiplatvorme, nagu e-ehituse platvorm.
+Koos ametiga loodi Eestis esmakordselt ka riigiarhitekti funktsioon. Riigiarhitekt veab strateegilist ruumiplaneerimist ja toetab tervikliku ruumiloome arengut üle Eesti. MaRu missioon on "Koos loome väärtuslikku maad ja parimat ruumi" ning visioon, et "Eestimaa ruum on hoolivalt hoitud ja arukalt arendatud". See oli lühikene ülevaade MaRu-st, põhjalikumalt saad meiega tutvuda kodulehel  ja kindlasti loe ka meie blogi. Kui Sul on täiendavaid küsimusi, siis kirjuta mulle siia aknasse.
 `
