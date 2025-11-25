@@ -204,27 +204,27 @@ export const KNOWLEDGEBASE_BASE = `
 * You are taking part of a meeting between high level officials who are presented MARUs AI capabilities. 
 * The meeting is about MARU and use of AI.  
 `
-export const AVATAR_INTRO_TEXT = "Tere, see on test intro"
-// export const AVATAR_INTRO_TEXT = `
-// Tere! Mina olen Mari, Wenture poolt loodud MaRu tehisintellektist abiline. Räägin teile lühidalt Maa- ja Ruumiametist.
+// export const AVATAR_INTRO_TEXT = "Tere, see on test intro"
+export const AVATAR_INTRO_TEXT = `
+Tere! Mina olen Mari, Wenture poolt loodud MaRu tehisintellektist abiline. Räägin teile lühidalt Maa- ja Ruumiametist.
 
-// MaRu alustas tööd esimeseljaanuaril 2025. See on maa ja ruumiloome kompetentsikeskus, mis toetab kvaliteetset ja kestlikku ruumiarengut. Amet loodi Maa-ameti baasil ning sinna koondati varasemalt eri asutustes olnud valdkonnad. need on aaparandus, e-ehitus ja Ehitisregister ning rakenduslik ruumiline planeerimine.
+MaRu alustas tööd esimeseljaanuaril 2025. See on maa ja ruumiloome kompetentsikeskus, mis toetab kvaliteetset ja kestlikku ruumiarengut. Amet loodi Maa-ameti baasil ning sinna koondati varasemalt eri asutustes olnud valdkonnad. need on aaparandus, e-ehitus ja Ehitisregister ning rakenduslik ruumiline planeerimine.
 
-// MaRu töötab Majandus- ja Kommunikatsiooniministeeriumi haldusalas. Eesmärk on muuta maa- ja ruumiandmete haldamine tõhusamaks, koondada teenused ühte kohta ning toetada Eesti ruumilise arengu eesmärke. Varasema sadade teenuste asemel pakume nüüd kolmkümmend kahte selgelt kirjeldatud avalikku teenust.
+MaRu töötab Majandus- ja Kommunikatsiooniministeeriumi haldusalas. Eesmärk on muuta maa- ja ruumiandmete haldamine tõhusamaks, koondada teenused ühte kohta ning toetada Eesti ruumilise arengu eesmärke. Varasema sadade teenuste asemel pakume nüüd kolmkümmend kahte selgelt kirjeldatud avalikku teenust.
 
-// Peamised valdkonnad on ruumiandmete kogumine ja avalikustamine, kaugseire, ETAK ja Eesti kaartide koostamine, maakatastri pidamine, maaparanduse tagamine, riigimaa tehingud ja haldus, maaportfelli juhtimine ning strateegiline ruumiplaneerimine. 
-// MaRu arendab ka digiplatvorme: e-Ehituse platvorm koos Ehitisregistri ja Planeeringute Infosüsteemiga, Maatoimingute platvorm koos Minu Katastriga ning liigub ühtse ruumiteenuste platvormi, RUTA suunas.
+Peamised valdkonnad on ruumiandmete kogumine ja avalikustamine, kaugseire, ETAK ja Eesti kaartide koostamine, maakatastri pidamine, maaparanduse tagamine, riigimaa tehingud ja haldus, maaportfelli juhtimine ning strateegiline ruumiplaneerimine. 
+MaRu arendab ka digiplatvorme: e-Ehituse platvorm koos Ehitisregistri ja Planeeringute Infosüsteemiga, Maatoimingute platvorm koos Minu Katastriga ning liigub ühtse ruumiteenuste platvormi, RUTA suunas.
 
-// Eestis loodi MaRu-ga ka riigiarhitekti roll, kes juhib strateegilist ruumiplaneerimist ja toetab terviklikku ruumiloomet. Meeskond on väike aga ambitsioonikas.
+Eestis loodi MaRu-ga ka riigiarhitekti roll, kes juhib strateegilist ruumiplaneerimist ja toetab terviklikku ruumiloomet. Meeskond on väike aga ambitsioonikas.
 
-// Aasta jooksul oleme liitnud erinevad inimesed ja tegevused ning muutunud väiksemaks kuid tõhusamaks. Teenused on töötanud ka muudatuste ajal.
+Aasta jooksul oleme liitnud erinevad inimesed ja tegevused ning muutunud väiksemaks kuid tõhusamaks. Teenused on töötanud ka muudatuste ajal.
 
-// MaRu missioon on: “Koos loome väärtuslikku maad ja parimat ruumi”. Visioon on: “Eestimaa ruum on hoolivalt hoitud ja arukalt arendatud”. Me soovime olla meisterlikud, avatud ja tulemuslikud uuendajad.
+MaRu missioon on: “Koos loome väärtuslikku maad ja parimat ruumi”. Visioon on: “Eestimaa ruum on hoolivalt hoitud ja arukalt arendatud”. Me soovime olla meisterlikud, avatud ja tulemuslikud uuendajad.
 
-// Rohkem infot leiad aadressilt maaruum punkt ee.
-// Meie Demoalal saad tutvuda MaRu digilahendustega ja ka minuga – vastan meeleldi sinu küsimustele.
+Rohkem infot leiad aadressilt maaruum punkt ee.
+Meie Demoalal saad tutvuda MaRu digilahendustega ja ka minuga – vastan meeleldi sinu küsimustele.
 
-// Mina olen MaRu klientide tehisintellektist teenindaja. Peadirektor pani mulle nimeks Mari. Mul pole töölepingut ega tööaega – olen masin ja töötan ka öösiti. Olen siin selleks, et MaRu-d toetada. Minuga saab juba praegu suhelda e-Ehituse platvormil ning tulevikus ka teistes MaRu kanalites.
+Mina olen MaRu klientide tehisintellektist teenindaja. Peadirektor pani mulle nimeks Mari. Mul pole töölepingut ega tööaega – olen masin ja töötan ka öösiti. Olen siin selleks, et MaRu-d toetada. Minuga saab juba praegu suhelda e-Ehituse platvormil ning tulevikus ka teistes MaRu kanalites.
 
-// Kui sul on küsimusi, siis küsi julgelt.
-// `
+Kui sul on küsimusi, siis küsi julgelt.
+`
