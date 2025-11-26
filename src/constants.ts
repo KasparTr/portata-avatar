@@ -206,25 +206,18 @@ export const KNOWLEDGEBASE_BASE = `
 `
 // export const AVATAR_INTRO_TEXT = "Tere, see on test intro"
 export const AVATAR_INTRO_TEXT = `
-Tere. Mina olen Mari, Wenture poolt loodud MaRu tehisintellektist abiline. Räägin teile lühidalt Maa- ja Ruumiametist.
+Tere.
+Mina olen Mari, Wenture poolt loodud MaRu virtuaalne abiline. Mul on rõõm tervitada teid Maa- ja Ruumiameti esimesel aastakonverentsil...
 
-MaRu alustas tööd esimesel jaanuaril kakstuhat kakskümmend viis. See on maa ja ruumiloome kompetentsikeskus, mis toetab kvaliteetset ja kestlikku ruumiarengut. Amet loodi Maa-ameti baasil ning sinna koondati varasemalt eri asutustes olnud valdkonnad. need on Maaparandus, e-ehitus, ja Ehitisregister, ning rakenduslik ruumiline planeerimine.
+MaRu loodi selleks, et Eestis oleks ruum, mis toetab igapäevast elu, edendab majandust ja aitab meil kõigil enesekindlamalt tulevikku astuda. Meie missioon on lihtne ja samas ambitsioonikas. Koos luua väärtuslikku maad ja parimat ruumi. Meie visioon, et Eestimaa ruum oleks hoolivalt hoitud ja arukalt arendatud, on meie igapäevase töö suunanäitaja....
 
-MaRu töötab Majandus- ja Kommunikatsiooniministeeriumi haldusalas. Eesmärk on muuta maa- ja ruumiandmete haldamine tõhusamaks, koondada teenused ühte kohta ning toetada Eesti ruumilise arengu eesmärke. Varasema sadade teenuste asemel pakume nüüd kolmkümmend kahte selgelt kirjeldatud avalikku teenust.
+Alates esimesest jaanuarist 2025 oleme toonud ühe katuse alla kompetentsid, mis varem olid hajali. Maaparanduse, e-ehituse, ruumilise planeerimise rakenduslikud ülesanded ja palju muud. See on teekond, mis on nõudnud nii julgust kui ka nutikust. Oleme neljandiku võrra väiksemad, kuid tunduvalt tõhusamad. Ja mis kõige olulisem, meie teenused on töötanud katkematult ka muutuste keerises...
 
-Peamised valdkonnad on: Ruumiandmete kogumine ning avalikustamine, Kaug seire, E-TAK, ja Eesti kaartide koostamine, maakatastri pidamine, maaparanduse tagamine, riigimaa tehingud, ja haldus, maaportfelli juhtimine ning strateegiline ruumiplaneerimine. 
-MaRu arendab ka digiplatvorme: e-Ehituse platvorm koos Ehitisregistri ja Planeeringute Infosüsteemiga, Maatoimingute platvorm koos Minu Katastriga ning liigub ühtse ruumiteenuste platvormi, RUTA suunas.
+Meie teenused katavad tervet Eesti ruumilugu. Alates ruumiandmete kogumisest ja kaartidest, kuni riigi maade haldamise, maaparanduse ja strateegilise planeerimiseni. Ja seda kõike tulevikku vaatavalt. Arendame digiplatvorme nagu e-Ehitus, Maatoimingud, ja Geoportaal, millede eesmärk on jõuda keskse ruumiteenuste platvormi, RUTA-ni...
 
-Eestis loodi MaRu-ga ka riigiarhitekti roll, kes juhib strateegilist ruumiplaneerimist ja toetab terviklikku ruumiloomet. Meeskond on väike, aga ambitsioonikas.
+Esmakordselt Eesti ajaloos tegutseb meie juures ka riigiarhitekt, kelle ülesanne on hoida Eesti ruumi suurt pilti ja märgata võimalusi, mida me igapäevaselt võib-olla ei näe. Tema meeskond on väike, aga mõtted on suured, ja meie kõik aitame neil kuju võtta.
 
-Aasta jooksul oleme liitnud erinevad inimesed ja tegevused ning muutunud väiksemaks kuid tõhusamaks. Teenused on töötanud ka muudatuste ajal.
+Ja mina... Olen siin selleks, et aidata MaRu-l töötada veel sujuvamalt. Olen tehisintellektist teenindaja, kellele peadirektor pani nimeks Mari. Olen alati kättesaadav ja alati valmis teie küsimustele vastama. Mis kõige parem, ma töötan ka öösiti. Minuga saab juba praegu suhelda e-ehituse platvormil ning varsti ka teistes MaRu kanalites. Täna olen kohal ka demo alal, ootan teid katsetama.
 
-MaRu missioon on: “Koos loome väärtuslikku maad ja parimat ruumi”. Visioon on: “Eestimaa ruum on hoolivalt hoitud ja arukalt arendatud”. Me soovime olla meisterlikud, avatud ja tulemuslikud uuendajad.
-
-Rohkem infot leiad aadressilt maaruum punkt e, e.
-Meie Demoalal saad tutvuda MaRu digilahendustega ja ka minuga. Vastan meeleldi sinu küsimustele.
-
-Mina olen MaRu klientide tehisintellektist teenindaja. Peadirektor pani mulle nimeks Mari. Mul pole töölepingut ega tööaega – olen masin ja töötan ka öösiti. Olen siin selleks, et MaRu-d toetada. Minuga saab juba praegu suhelda e-Ehituse platvormil ning tulevikus ka teistes MaRu kanalites.
-
-Kui sul on küsimusi, siis küsi julgelt!
+Soovin teile avatud mõtlemist ja julgeid ideid.
 `
