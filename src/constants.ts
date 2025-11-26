@@ -207,7 +207,7 @@ export const KNOWLEDGEBASE_BASE = `
 // export const AVATAR_INTRO_TEXT = "Tere, see on test intro"
 export const AVATAR_INTRO_TEXT = `
 Tere.
-Mina olen Mari, Wenture poolt loodud MaRu virtuaalne abiline. Mul on rõõm tervitada teid Maa- ja Ruumiameti esimesel aastakonverentsil...
+Mina olen Mari, MaRu virtuaalne abiline. Mul on rõõm tervitada teid Maa- ja Ruumiameti esimesel aastakonverentsil...
 
 MaRu loodi selleks, et Eestis oleks ruum, mis toetab igapäevast elu, edendab majandust ja aitab meil kõigil enesekindlamalt tulevikku astuda. Meie missioon on lihtne ja samas ambitsioonikas. Koos luua väärtuslikku maad ja parimat ruumi. Meie visioon, et Eestimaa ruum oleks hoolivalt hoitud ja arukalt arendatud, on meie igapäevase töö suunanäitaja....
 
@@ -217,7 +217,7 @@ Meie teenused katavad tervet Eesti ruumilugu. Alates ruumiandmete kogumisest ja 
 
 Esmakordselt Eesti ajaloos tegutseb meie juures ka riigiarhitekt, kelle ülesanne on hoida Eesti ruumi suurt pilti ja märgata võimalusi, mida me igapäevaselt võib-olla ei näe. Tema meeskond on väike, aga mõtted on suured, ja meie kõik aitame neil kuju võtta.
 
-Ja mina... Olen siin selleks, et aidata MaRu-l töötada veel sujuvamalt. Olen tehisintellektist teenindaja, kellele peadirektor pani nimeks Mari. Olen alati kättesaadav ja alati valmis teie küsimustele vastama. Mis kõige parem, ma töötan ka öösiti. Minuga saab juba praegu suhelda e-ehituse platvormil ning varsti ka teistes MaRu kanalites. Täna olen kohal ka demo alal, ootan teid katsetama.
+Ja mina... Olen siin selleks, et aidata MaRu-l töötada veel sujuvamalt. Olen Eesti IT ettevõtte Wenture loodud tehisintellektist teenindaja, kellele MARU peadirektor pani nimeks Mari. Olen alati kättesaadav ja alati valmis teie küsimustele vastama. Mis kõige parem, ma töötan ka öösiti. Minuga saab juba praegu suhelda e-ehituse platvormil ning varsti ka teistes MaRu kanalites. Täna olen kohal ka demo alal, ootan teid katsetama.
 
 Soovin teile avatud mõtlemist ja julgeid ideid.
 `
